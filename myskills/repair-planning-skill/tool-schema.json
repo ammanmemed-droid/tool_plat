@@ -1,0 +1,290 @@
+{
+  "tool_name": "repair_planning_service",
+  "tool_kind": "global_tool_service",
+  "description": "基于明确的 repair_target，从结构化维修知识中查询维修方案、维修方法、零件、工时和价格，输出 repair_plan 的全局服务。",
+  "input_schema": {
+    "type": "object",
+    "required": ["repair_target"],
+    "properties": {
+      "repair_target": {
+        "type": "object",
+        "required": ["target_name", "target_status"],
+        "description": "本次维修方案的查询对象，可以是已确认原因、用户指定故障假设或用户指定维修对象",
+        "properties": {
+          "target_name": {
+            "type": "string",
+            "description": "维修目标名称，例如“进气泄漏”“氧传感器损坏”“节气门积碳”"
+          },
+          "target_status": {
+            "type": "string",
+            "enum": ["confirmed", "user_hypothesis", "user_specified_object"],
+            "description": "目标状态：confirmed 已确认原因，user_hypothesis 用户指定假设，user_specified_object 用户指定维修对象"
+          },
+          "target_description": {
+            "type": "string",
+            "description": "对维修目标的补充说明"
+          },
+          "cause_id": {
+            "type": "string",
+            "description": "当 repair_target 来源于已确认原因或标准原因数据时输出"
+          },
+          "related_parts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "该维修目标涉及的零件、部件或相关对象"
+          },
+          "source": {
+            "type": "string",
+            "description": "来源：Diagnostic Planning / 用户输入 / 当前任务状态"
+          }
+        }
+      },
+      "brand": {
+        "type": "string",
+        "description": "车辆品牌，用于匹配品牌相关维修方案、零件、工时和价格"
+      },
+      "vehicle_info": {
+        "type": "object",
+        "description": "可选车辆上下文，用于提高维修方案和零件匹配准确性",
+        "properties": {
+          "model": { "type": "string" },
+          "year": { "type": "string" },
+          "engine": { "type": "string" },
+          "vin": { "type": "string" },
+          "configuration": { "type": "string" }
+        }
+      },
+      "target_type": {
+        "type": "string",
+        "enum": ["dtc_group", "single_dtc", "symptom_case", "user_specified_target"],
+        "description": "分析对象类型"
+      },
+      "dtcs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "当前维修目标关联的 DTC；来自 DTC Group 或 single DTC 链路时应携带"
+      },
+      "symptom_description": {
+        "type": "string",
+        "description": "故障现象描述；当前维修目标来自 symptom_case 时携带"
+      },
+      "dtc_result": {
+        "type": "string",
+        "enum": ["unknown", "no_dtc"],
+        "description": "DTC 结果状态；当前维修目标来自 symptom_case 时携带"
+      },
+      "group_id": {
+        "type": "string",
+        "description": "DTC 分组 ID；当前维修目标来自 DTC Group 时携带"
+      },
+      "system": {
+        "type": "string",
+        "description": "当前维修目标所属系统"
+      },
+      "related_parts": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "当前维修目标涉及的零件、模块、线路、传感器、执行器或检测对象"
+      },
+      "output_options": {
+        "type": "object",
+        "description": "输出选项，控制是否输出工时和价格",
+        "properties": {
+          "include_labor_price": {
+            "type": "boolean",
+            "default": false,
+            "description": "是否输出工时和价格；默认 false"
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "repair_plan": {
+        "type": ["object", "null"],
+        "description": "本次维修方案整体；无法生成时为 null",
+        "required": [
+          "repair_target",
+          "repair_solution",
+          "repair_method",
+          "risk_level",
+          "post_repair_validation"
+        ],
+        "properties": {
+          "repair_target": {
+            "type": "object",
+            "required": ["target_name", "target_status"],
+            "properties": {
+              "target_name": { "type": "string" },
+              "target_status": {
+                "type": "string",
+                "enum": ["confirmed", "user_hypothesis", "user_specified_object"]
+              },
+              "target_description": { "type": "string" },
+              "cause_id": { "type": "string" },
+              "related_parts": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "source": { "type": "string" }
+            }
+          },
+          "target_type": {
+            "type": "string",
+            "enum": ["dtc_group", "single_dtc", "symptom_case", "user_specified_target"]
+          },
+          "repair_solution": {
+            "type": "object",
+            "required": [
+              "repair_solution_name",
+              "solution_source",
+              "source_confidence"
+            ],
+            "properties": {
+              "repair_solution_id": {
+                "type": "string",
+                "description": "结构化维修方案存在时输出；大模型兜底时不得编造"
+              },
+              "repair_solution_name": {
+                "type": "string",
+                "description": "当前维修方案名称，如“更换前氧传感器”“修复进气泄漏点”"
+              },
+              "repair_solution_description": {
+                "type": "string",
+                "description": "对维修方案的补充说明"
+              },
+              "matched_cause_id": { "type": "string" },
+              "matched_cause_name": { "type": "string" },
+              "matched_dtcs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "matched_symptom": { "type": "string" },
+              "solution_source": {
+                "type": "string",
+                "enum": ["structured_repair_knowledge", "llm_generated"]
+              },
+              "source_confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "uncertainty_note": { "type": "string" }
+            }
+          },
+          "repair_method": {
+            "type": "string",
+            "description": "用自然语言说明该维修方案大概怎么执行"
+          },
+          "parts": {
+            "type": "array",
+            "description": "该维修方案涉及的零件、耗材或替换件",
+            "items": {
+              "type": "object",
+              "required": ["part_name"],
+              "properties": {
+                "part_name": { "type": "string" },
+                "quantity": { "type": "number" },
+                "part_number": {
+                  "type": "string",
+                  "description": "有可靠零件数据时输出；不得编造"
+                },
+                "part_type": {
+                  "type": "string",
+                  "enum": ["oem", "brand", "aftermarket", "remanufactured", "used", "unknown"]
+                },
+                "price_estimate": { "type": "string" },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "structured_repair_knowledge",
+                    "parts_catalog",
+                    "price_database",
+                    "llm_generated"
+                  ]
+                },
+                "uncertainty_note": { "type": "string" }
+              }
+            }
+          },
+          "labor_estimate": {
+            "type": "object",
+            "description": "include_labor_price = true 时输出",
+            "required": ["estimated_time", "source_confidence"],
+            "properties": {
+              "estimated_time": {
+                "type": "string",
+                "description": "工时预估，例如 0.5 - 1.5 小时"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "labor_database",
+                  "standard_repair_data",
+                  "case_work_order",
+                  "llm_generated"
+                ]
+              },
+              "source_confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "uncertainty_note": { "type": "string" }
+            }
+          },
+          "cost_estimate": {
+            "type": "object",
+            "description": "include_labor_price = true 时输出",
+            "required": ["source_confidence"],
+            "properties": {
+              "parts_cost": { "type": "string" },
+              "labor_cost": { "type": "string" },
+              "total_cost": { "type": "string" },
+              "currency": { "type": "string" },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "price_database",
+                  "quotation_system",
+                  "case_work_order",
+                  "llm_generated"
+                ]
+              },
+              "source_confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "uncertainty_note": { "type": "string" }
+            }
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "warning_note": {
+            "type": "string",
+            "description": "高风险、专用工具、编程、校准、条件性方案等场景输出"
+          },
+          "post_repair_validation": {
+            "type": "string",
+            "description": "用自然语言说明维修后如何确认修好，以及验证失败时如何处理"
+          },
+          "uncertainty_note": {
+            "type": "string",
+            "description": "条件性方案、低置信度、资料不足等场景输出"
+          }
+        }
+      },
+      "uncertainty_note": {
+        "type": "string",
+        "description": "repair_plan 无法生成、整体低置信度或信息不足时的不确定性说明"
+      },
+      "missing_required_info": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "无法生成维修方案时输出缺失信息"
+      }
+    }
+  }
+}

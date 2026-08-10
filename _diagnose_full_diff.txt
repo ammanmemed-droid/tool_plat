@@ -1,0 +1,31 @@
+===== input_schema =====
+- input_schema.$defs.VehicleInfo.properties.brand.default (local only): null
+- input_schema.$defs.VehicleInfo.properties.dtc_category.default (local only): null
+- input_schema.$defs.VehicleInfo.properties.model.default (local only): null
+- input_schema.$defs.VehicleInfo.properties.system.default (local only): null
+- input_schema.$defs.VehicleInfo.properties.vin.default (local only): null
+- input_schema.$defs.VehicleInfo.properties.year.default (local only): null
+- input_schema.properties.vehicle_info.default (local only): null
+
+===== output_schema =====
+- output_schema.$defs.ContextOut.properties.brand.default (local only): null
+- output_schema.$defs.ContextOut.properties.model.default (local only): null
+- output_schema.$defs.ContextOut.properties.system.default (local only): null
+- output_schema.$defs.ContextOut.properties.year.default (local only): null
+- output_schema.$defs.GroupOut.properties.dtc_category.default (local only): null
+- output_schema.$defs.GroupOut.properties.system.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.dtc_category.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.labor_hours.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.oem_doc.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.oem_doc_url.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.price.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.recommended_check.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.relevance_score.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.repair_method.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.repair_solution.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.rule_score.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.score_breakdown.default (local only): null
+- output_schema.$defs.RankedCauseOut.properties.score_source.default (local only): null
+- output_schema.properties.context.default (local only): null
+- output_schema.properties.missing_required_info.default (local only): null
+- output_schema.properties.uncertainty_note.default (local only): null

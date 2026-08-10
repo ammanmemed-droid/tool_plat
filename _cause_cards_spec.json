@@ -1,0 +1,220 @@
+{
+  "path_item": {
+    "post": {
+      "tags": [
+        "DTC 原因处置卡片"
+      ],
+      "summary": "按零部件关系聚合 DTC 原因处置卡片",
+      "description": "从未分组 DTC 列表生成故障组、全部去重原因及检查/维修/验证信息。\n\n- 本地知识库精确查询，不调用已有诊断或五工具 HTTP API；\n- DTC 按 PCBU 硬边界和规范零部件交集分组；\n- ``group_names`` 是分组共享零件交集，``involved_parts`` 是组内零件并集；\n- ``dtc_level`` 返回组内最严重的有效等级，-1 和空值不参与定级；\n- 原因按规范名称去重，检查项取来源顺序最靠前的有效值；\n- LLM 只补检查判据、操作提示和维修后验证，失败时模板降级。",
+      "operationId": "compose_dtc_cause_cards_api_v1_dtc_cause_cards_post",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CauseCardsRequest"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CauseCardsResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "请求校验失败",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "500": {
+          "description": "内部错误",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "502": {
+          "description": "上游数据源不可用",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "503": {
+          "description": "依赖配置不完整",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "504": {
+          "description": "请求超时",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "CauseCardsRequest": {
+      "properties": {
+        "dtc_codes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Dtc Codes",
+          "description": "未分组 DTC 列表，1–50 个"
+        }
+      },
+      "type": "object",
+      "required": [
+        "dtc_codes"
+      ],
+      "title": "CauseCardsRequest",
+      "description": "待自动检索、分组和聚合的 DTC 列表。"
+    },
+    "CauseCardsResponse": {
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "title": "Request Id"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/components/schemas/CauseGroupOut"
+          },
+          "type": "array",
+          "title": "Groups"
+        },
+        "unmatched_dtcs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Unmatched Dtcs"
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "title": "Elapsed Ms"
+        },
+        "llm_degraded": {
+          "type": "boolean",
+          "title": "Llm Degraded",
+          "description": "true 表示 LLM 被禁用、不可达或输出无效，维修后验证已使用模板降级",
+          "default": false
+        },
+        "uncertainty_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Uncertainty Note"
+        },
+        "missing_required_info": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Missing Required Info"
+        }
+      },
+      "type": "object",
+      "required": [
+        "request_id",
+        "groups",
+        "unmatched_dtcs",
+        "elapsed_ms"
+      ],
+      "title": "CauseCardsResponse"
+    },
+    "ErrorResponse": {
+      "properties": {
+        "error": {
+          "type": "string",
+          "title": "Error"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Detail"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Request Id"
+        },
+        "errors": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Errors",
+          "description": "422 校验错误详情"
+        }
+      },
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "title": "ErrorResponse",
+      "description": "统一错误响应。"
+    }
+  }
+}

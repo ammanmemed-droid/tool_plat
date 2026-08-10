@@ -1,0 +1,6632 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "roxie-rag-service",
+    "description": "汽车 DTC 故障码检索增强生成服务。\n\n四路 async 并行召回 + RRF 融合 + 规则重排 + Cross-Encoder 精排 + 断崖截断。\n\n## 接口概览\n\n| 接口 | 说明 |\n| --- | --- |\n| `POST /api/v1/diagnoses` | DTC 故障诊断检索(主接口) |\n| `POST /api/v1/context/extract` | 故障上下文槽位提取 |\n| `POST /api/v1/dtc-groups` | DTC 候选记录分组(独立计算) |\n| `POST /api/v1/candidate-causes/rank` | 候选原因排序(独立计算) |\n| `POST /api/v1/dtc-cause-cards` | DTC 故障组原因处置卡片聚合 |\n| `GET /api/v1/tools` | Roxie 工具发现:列出全部工具 |\n| `GET /api/v1/tools/{tool_name}` | Roxie 工具发现:单个工具完整定义 |\n| `POST /api/v1/tools/{tool_name}/invoke` | 五工具统一调用入口 |\n| `POST /api/v1/tool-services/dtc-context` | 强类型:DTC 背景上下文解析 |\n| `POST /api/v1/tool-services/dtc-grouping` | 强类型:多 DTC 关联分组 |\n| `POST /api/v1/tool-services/cause-ranking` | 强类型:候选原因检索/排序 |\n| `POST /api/v1/tool-services/diagnostic-planning` | 强类型:诊断检查项/计划 |\n| `POST /api/v1/tool-services/repair-planning` | 强类型:维修计划生成 |\n| `GET /api/v1/live` | 存活探针 |\n| `GET /api/v1/ready` | 就绪探针(MySQL) |\n| `GET /api/v1/health` | 深度健康检查(五组件) |\n",
+    "version": "0.6.0"
+  },
+  "paths": {
+    "/api/v1/diagnoses": {
+      "post": {
+        "tags": [
+          "综合诊断服务"
+        ],
+        "summary": "DTC 故障诊断检索(主接口)",
+        "description": "创建一次 DTC 诊断检索。\n\n- 四路 async 并行召回 + RRF 融合 + 规则重排 + Cross-Encoder 精排 + 断崖截断\n- 请求级协程超时(API_REQUEST_TIMEOUT_SEC),超时返回 504\n- SQL 原生异步；LLM/Reranker 同步客户端在各自边界进入 to_thread\n- Reranker 不可达自动降级为规则分排序\n- request_id 与中间件 X-Request-ID 响应头一致",
+        "operationId": "diagnose_api_v1_diagnoses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnoseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnoseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游服务不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务未就绪",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "请求超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/context/extract": {
+      "post": {
+        "tags": [
+          "DTC 上下文解析"
+        ],
+        "summary": "故障上下文槽位提取",
+        "description": "单独跑 F1 槽位提取(调试 / 复用 Context 分析)。\n\n可能在规则抽不到时调用 LLM；其同步 HTTP 客户端在提取器内部进入 to_thread。\nrequest_id 与中间件 X-Request-ID 响应头一致。",
+        "operationId": "extract_context_api_v1_context_extract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextExtractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextExtractResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dtc-groups": {
+      "post": {
+        "tags": [
+          "DTC 分组"
+        ],
+        "summary": "DTC 候选记录分组",
+        "description": "先按 PCBU 一级分类隔离，再对给定候选记录做规则分组。\n\n- 同一一级分类内按同码 / 规范化零部件交集 / 独立细分\n- 纯规则计算(RuleGrouper),不调检索与外部模型\n- 候选按规范零部件倒排聚类,candidates 上限 200 条\n- request_id 与中间件 X-Request-ID 响应头一致",
+        "operationId": "group_dtc_api_v1_dtc_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DtcGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DtcGroupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "请求超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/candidate-causes/rank": {
+      "post": {
+        "tags": [
+          "候选原因排序"
+        ],
+        "summary": "候选原因排序(规则 + Cross-Encoder + 断崖截断)",
+        "description": "对给定候选原因做独立排序,不走检索召回。\n\n- 规则重排(rule_score)→ Cross-Encoder 批量打分(relevance_score)→ final_score + 断崖截断\n- Reranker 不可达自动降级为规则分排序(reranker_degraded=true,跳过断崖)\n- 请求级硬超时(API_REQUEST_TIMEOUT_SEC),超时返回 504\n- request_id 与中间件 X-Request-ID 响应头一致",
+        "operationId": "rank_candidate_causes_api_v1_candidate_causes_rank_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateRankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRankResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "请求超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/live": {
+      "get": {
+        "tags": [
+          "健康检查"
+        ],
+        "summary": "存活探针 Liveness",
+        "description": "存活探针:进程事件循环存活即 200,不调任何外部服务。",
+        "operationId": "live_api_v1_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "tags": [
+          "健康检查"
+        ],
+        "summary": "就绪探针 Readiness",
+        "description": "就绪探针:仅检查 MySQL(硬依赖),async + 探针超时 + single-flight 缓存。不可用返回 503。",
+        "operationId": "ready_api_v1_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MySQL 不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "健康检查"
+        ],
+        "summary": "深度健康检查(五组件)",
+        "description": "深度健康检查:五组件并行 + 探针超时 + single-flight 缓存。\n\n- status=healthy: 全部 ok → 200\n- status=degraded: 部分不可用但 MySQL 可用 → 200\n- status=unhealthy: MySQL 不可用 → 503",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "核心依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dtc-cause-cards": {
+      "post": {
+        "tags": [
+          "DTC 原因处置卡片"
+        ],
+        "summary": "按零部件关系聚合 DTC 原因处置卡片",
+        "description": "从未分组 DTC 列表生成故障组、全部去重原因及检查/维修/验证信息。\n\n- 默认按品牌+车型严格查询；仅显式策略允许同品牌其他车型降级；\n- DTC 按 PCBU 硬边界和规范零部件交集分组；\n- ``group_names`` 是分组共享零件交集，``involved_parts`` 是组内零件并集；\n- ``dtc_level`` 返回组内最严重的有效等级，-1 和空值不参与定级；\n- 原因按规范名称去重，检查项取来源顺序最靠前的有效值；\n- LLM 只补检查判据、操作提示和维修后验证，失败时模板降级。",
+        "operationId": "compose_dtc_cause_cards_api_v1_dtc_cause_cards_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CauseCardsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CauseCardsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "请求超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "工具发现：列出全部可用工具",
+        "operationId": "list_tools_api_v1_tools_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/{tool_name}": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "工具发现：获取单个工具完整定义",
+        "operationId": "get_tool_api_v1_tools__tool_name__get",
+        "parameters": [
+          {
+            "name": "tool_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tool Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "工具不存在"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/{tool_name}/invoke": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "统一调用：执行工具",
+        "operationId": "invoke_tool_api_v1_tools__tool_name__invoke_post",
+        "parameters": [
+          {
+            "name": "tool_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tool Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolInvokeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolInvokeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "工具不存在"
+          },
+          "400": {
+            "description": "arguments 不符合工具 input_schema"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-services/dtc-context": {
+      "post": {
+        "tags": [
+          "dtc_context_service"
+        ],
+        "summary": "解析单个 DTC 的标准化背景上下文",
+        "description": "根据 DTC、品牌及可选车辆信息，返回 PCBU 一级分类、二级系统名、故障码描述、触发条件、相关零件/数据流、解释类型、来源和置信度。",
+        "operationId": "typed_dtc_context_api_v1_tool_services_dtc_context_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DtcContextToolInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DtcContextToolOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求体不符合接口 schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "工具执行失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "工具执行超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-services/dtc-grouping": {
+      "post": {
+        "tags": [
+          "dtc_grouping_service"
+        ],
+        "summary": "对多个 DTC 进行关联分组",
+        "description": "先按 PCBU 一级分类隔离，再按规范化故障零部件交集聚合多个 DTC；每个多码组必须存在共同零部件，组名取该交集。dtc_list 至少需要两个不同 DTC；单个 DTC 请调用 dtc_context_service。",
+        "operationId": "typed_dtc_grouping_api_v1_tool_services_dtc_grouping_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DtcGroupingToolInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DtcGroupingToolOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求体不符合接口 schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "工具执行失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "工具执行超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-services/cause-ranking": {
+      "post": {
+        "tags": [
+          "cause_ranking_service"
+        ],
+        "summary": "检索或排序候选故障原因",
+        "description": "operation=retrieve_causes 时从维修知识检索候选原因；operation=rank_causes 时结合当前证据对候选原因排序；省略 operation/target_type 时自动推导目标并一次完成检索与排序。",
+        "operationId": "typed_cause_ranking_api_v1_tool_services_cause_ranking_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CauseRankingToolInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CauseRankingToolOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求体不符合接口 schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "工具执行失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "工具执行超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-services/diagnostic-planning": {
+      "post": {
+        "tags": [
+          "diagnostic_planning_service"
+        ],
+        "summary": "检索检查项或生成诊断检查计划",
+        "description": "operation=retrieve_checks 时拉取结构化检查项；operation=rank_checks 时按候选原因和检查结果生成有序诊断计划；省略 operation/target_type 时自动推导目标并一次完成检查项检索与排序。",
+        "operationId": "typed_diagnostic_planning_api_v1_tool_services_diagnostic_planning_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticPlanningToolInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticPlanningToolOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求体不符合接口 schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "工具执行失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "工具执行超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tool-services/repair-planning": {
+      "post": {
+        "tags": [
+          "repair_planning_service"
+        ],
+        "summary": "根据明确维修目标生成维修计划",
+        "description": "从结构化维修知识中组装维修方案、方法、零件、工时、价格、风险提示和维修后验证步骤。",
+        "operationId": "typed_repair_planning_api_v1_tool_services_repair_planning_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairPlanningToolInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairPlanningToolOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求体不符合接口 schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "工具执行失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "上游数据源不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖配置不完整",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "工具执行超时",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AffectedCause": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "cause_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Name"
+          }
+        },
+        "type": "object",
+        "title": "AffectedCause"
+      },
+      "CandidateRankRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Query",
+            "description": "自然语言故障描述(排序上下文)"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RankCandidateIn"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Candidates",
+            "description": "待排序候选(1–200 条)"
+          },
+          "top_n": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "description": "断崖截断后返回 Top-N",
+            "default": 5
+          },
+          "enable_reranker": {
+            "type": "boolean",
+            "title": "Enable Reranker",
+            "description": "是否启用 Cross-Encoder 精排(不可达自动降级)",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "candidates"
+        ],
+        "title": "CandidateRankRequest",
+        "description": "POST /api/v1/candidate-causes/rank 请求体(独立候选原因排序服务)。",
+        "examples": [
+          {
+            "candidates": [
+              {
+                "brand": "福特",
+                "dtc_code": "P2089",
+                "fault_symptom": "加速无力",
+                "model": "蒙迪欧",
+                "parts": [
+                  "VCT电磁阀"
+                ],
+                "possible_cause": "VCT电磁阀线路开路",
+                "record_id": 95,
+                "trigger_condition": "发动机运行时"
+              }
+            ],
+            "enable_reranker": true,
+            "query": "福特蒙迪欧报P2089,加速无力",
+            "top_n": 5,
+            "vehicle_info": {
+              "brand": "福特",
+              "dtc_codes": [
+                "P2089"
+              ],
+              "model": "蒙迪欧"
+            }
+          }
+        ]
+      },
+      "CandidateRankResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "请求 ID,与 X-Request-ID 响应头一致"
+          },
+          "ranked_causes": {
+            "items": {
+              "$ref": "#/components/schemas/RankedCauseOut"
+            },
+            "type": "array",
+            "title": "Ranked Causes"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "是否触发断崖截断(true = 尾部低分候选被裁掉)"
+          },
+          "reranker_degraded": {
+            "type": "boolean",
+            "title": "Reranker Degraded",
+            "description": "Reranker 是否降级(true = 仅规则分排序,跳过断崖)"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms",
+            "description": "服务端耗时(毫秒)"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note",
+            "description": "结果不完整时的说明"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info",
+            "description": "请求中缺失的必需字段路径"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "ranked_causes",
+          "truncated",
+          "reranker_degraded",
+          "elapsed_ms"
+        ],
+        "title": "CandidateRankResponse",
+        "description": "POST /api/v1/candidate-causes/rank 响应体。",
+        "examples": [
+          {
+            "elapsed_ms": 120,
+            "ranked_causes": [
+              {
+                "dtc_category": "动力系统",
+                "dtc_code": "P2089",
+                "final_score": 0.78,
+                "labor_hours": 1.5,
+                "parts": [
+                  "VCT电磁阀"
+                ],
+                "possible_cause": "VCT电磁阀线路开路",
+                "price": 320.0,
+                "rank": 1,
+                "recommended_check": "测量 VCT 电磁阀供电电压",
+                "record_id": 95,
+                "relevance_score": 0.91,
+                "repair_method": "更换",
+                "repair_solution": "修复线路或更换 VCT 电磁阀",
+                "rule_score": 0.65,
+                "score_breakdown": {
+                  "b1_field": 0.6,
+                  "b2_jaccard": 0.05,
+                  "jaccard": 0.5
+                },
+                "score_source": "reranker"
+              }
+            ],
+            "request_id": "ab12cd34ef56",
+            "reranker_degraded": false,
+            "truncated": false
+          }
+        ]
+      },
+      "CauseCandidate": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "temporary_cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "cause_source": {
+            "type": "string",
+            "enum": [
+              "structured_reason_data",
+              "retrieved_oem_document",
+              "llm_generated"
+            ],
+            "title": "Cause Source"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "supported_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Dtcs"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_name",
+          "cause_source"
+        ],
+        "title": "CauseCandidate"
+      },
+      "CauseCandidateInput": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "temporary_cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "cause_source": {
+            "type": "string",
+            "enum": [
+              "structured_reason_data",
+              "retrieved_oem_document",
+              "llm_generated"
+            ],
+            "title": "Cause Source"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "supported_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Dtcs"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_name",
+          "cause_source"
+        ],
+        "title": "CauseCandidateInput"
+      },
+      "CauseCardOut": {
+        "properties": {
+          "cause_id": {
+            "type": "string",
+            "title": "Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "probability": {
+            "type": "string",
+            "title": "Probability",
+            "description": "该原因在所属故障组内的可能性百分比（如 \"50%\"）；同组各原因之和恒为 100%"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "支持该原因的组内 DTC"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids",
+            "description": "合并后的知识记录 ID，便于问题回查"
+          },
+          "inspection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InspectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repair": {
+            "$ref": "#/components/schemas/RepairOut"
+          },
+          "parts_and_tools": {
+            "$ref": "#/components/schemas/PartsAndToolsOut"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_id",
+          "cause_name",
+          "probability",
+          "dtc_codes",
+          "record_ids",
+          "repair",
+          "parts_and_tools",
+          "verification"
+        ],
+        "title": "CauseCardOut"
+      },
+      "CauseCardsRequest": {
+        "properties": {
+          "brand": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Brand",
+            "description": "目标车辆品牌"
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model",
+            "description": "目标车型"
+          },
+          "vehicle_match_policy": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "same_brand_fallback"
+            ],
+            "title": "Vehicle Match Policy",
+            "description": "strict=仅品牌+车型；same_brand_fallback=无车型数据时显式降级到同品牌其他车型",
+            "default": "strict"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Dtc Codes",
+            "description": "未分组 DTC 列表，1–50 个"
+          }
+        },
+        "type": "object",
+        "required": [
+          "brand",
+          "model",
+          "dtc_codes"
+        ],
+        "title": "CauseCardsRequest",
+        "description": "指定车辆下待自动检索、分组和聚合的 DTC 列表。"
+      },
+      "CauseCardsResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CauseGroupOut"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "unmatched_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unmatched Dtcs"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms"
+          },
+          "llm_degraded": {
+            "type": "boolean",
+            "title": "Llm Degraded",
+            "description": "true 表示 LLM 被禁用、不可达或输出无效，维修后验证已使用模板降级",
+            "default": false
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "groups",
+          "unmatched_dtcs",
+          "elapsed_ms"
+        ],
+        "title": "CauseCardsResponse"
+      },
+      "CauseGroupOut": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "group_name": {
+            "type": "string",
+            "title": "Group Name"
+          },
+          "dtc_level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Level",
+            "description": "组内最严重的有效故障等级：1 最严重、4 最不严重；-1 和无效值忽略"
+          },
+          "vehicle_match_level": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "same_brand_fallback"
+            ],
+            "title": "Vehicle Match Level",
+            "description": "组内知识的车辆匹配级别；存在任一降级 DTC 时为 same_brand_fallback"
+          },
+          "fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fallback Dtcs",
+            "description": "本组使用同品牌其他车型知识的 DTC；strict 组为空"
+          },
+          "representative_dtc": {
+            "type": "string",
+            "title": "Representative Dtc"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids"
+          },
+          "group_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Group Names",
+            "description": "形成分组关系的共享规范零部件（交集）"
+          },
+          "involved_parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Involved Parts",
+            "description": "组内全部知识记录相关零部件的规范化并集"
+          },
+          "group_reason": {
+            "type": "string",
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "semantic_family",
+              "standalone"
+            ],
+            "title": "Group Reason"
+          },
+          "causes": {
+            "items": {
+              "$ref": "#/components/schemas/CauseCardOut"
+            },
+            "type": "array",
+            "title": "Causes"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "group_name",
+          "vehicle_match_level",
+          "representative_dtc",
+          "dtc_codes",
+          "record_ids",
+          "group_names",
+          "involved_parts",
+          "group_reason",
+          "causes"
+        ],
+        "title": "CauseGroupOut"
+      },
+      "CauseLink": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "cause_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Name"
+          },
+          "cause_priority": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Priority"
+          },
+          "supported_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Dtcs"
+          }
+        },
+        "type": "object",
+        "title": "CauseLink"
+      },
+      "CauseRankingResult": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "dtc_group",
+              "single_dtc",
+              "symptom_case"
+            ],
+            "title": "Target Type"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "dtc_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "no_dtc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Result"
+          },
+          "dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtcs"
+          },
+          "symptom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom Description"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "ranked_causes": {
+            "items": {
+              "$ref": "#/components/schemas/RankedCause"
+            },
+            "type": "array",
+            "title": "Ranked Causes"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "ranked_causes"
+        ],
+        "title": "CauseRankingResult"
+      },
+      "CauseRankingToolInput": {
+        "properties": {
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "retrieve_causes",
+                  "rank_causes"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation",
+            "description": "兼容字段；省略时，有候选原因则排序，否则自动检索并排序。显式传值时保留旧版单阶段行为。",
+            "deprecated": true
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dtc_group",
+                  "single_dtc",
+                  "symptom_case"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type",
+            "description": "兼容字段；省略时根据 group_id、dtcs 或 symptom_description 自动推导。",
+            "deprecated": true
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtcs"
+          },
+          "symptom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom Description"
+          },
+          "dtc_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "no_dtc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Result"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CauseCandidateInput"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Causes"
+          },
+          "datastreams": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DataStreamValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datastreams"
+          },
+          "freeze_frame": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freeze Frame"
+          },
+          "inspection_results": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/InspectionResult"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspection Results"
+          },
+          "repair_feedback": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RepairFeedback"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Feedback"
+          },
+          "recurrence_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecurrenceResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ranked_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RankedCause"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranked Causes"
+          },
+          "diagnostic_context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Context",
+            "description": "中台会话上下文兼容入口；服务会提取当前选中故障组和车辆信息。"
+          }
+        },
+        "type": "object",
+        "title": "CauseRankingToolInput"
+      },
+      "CauseRankingToolOutput": {
+        "properties": {
+          "candidate_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CauseCandidate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Causes"
+          },
+          "ranking_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CauseRankingResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "title": "CauseRankingToolOutput"
+      },
+      "CheckCandidate": {
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "title": "Check Id"
+          },
+          "check_name": {
+            "type": "string",
+            "title": "Check Name"
+          },
+          "check_source": {
+            "type": "string",
+            "enum": [
+              "structured_repair_knowledge",
+              "llm_generated"
+            ],
+            "title": "Check Source"
+          },
+          "linked_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Dtcs"
+          },
+          "linked_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CauseLink"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Causes"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "check_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Type"
+          },
+          "check_goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Goal"
+          },
+          "structured_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Order"
+          },
+          "prerequisite_check_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prerequisite Check Ids"
+          },
+          "judgment_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgment Summary"
+          },
+          "result_branches": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CheckResultBranch"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Branches"
+          },
+          "check_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Cost"
+          },
+          "required_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tools"
+          },
+          "source_confidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Confidence"
+          },
+          "warning_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Note"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_id",
+          "check_name",
+          "check_source"
+        ],
+        "title": "CheckCandidate"
+      },
+      "CheckResultBranch": {
+        "properties": {
+          "result_type": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "abnormal",
+              "inconclusive"
+            ],
+            "title": "Result Type"
+          },
+          "judgment_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgment Condition"
+          },
+          "result_interpretation": {
+            "type": "string",
+            "title": "Result Interpretation"
+          },
+          "affected_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AffectedCause"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Causes"
+          },
+          "next_action": {
+            "type": "string",
+            "enum": [
+              "continue_check",
+              "update_cause_ranking",
+              "enter_repair_planning",
+              "ask_user",
+              "human_support"
+            ],
+            "title": "Next Action"
+          },
+          "next_check_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Check Id"
+          },
+          "confirmed_cause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmedCause"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result_type",
+          "result_interpretation",
+          "next_action"
+        ],
+        "title": "CheckResultBranch"
+      },
+      "ComponentHealth": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "ComponentHealth",
+        "description": "单个外部服务健康状态。"
+      },
+      "ConfirmedCause": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "cause_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Name"
+          }
+        },
+        "type": "object",
+        "title": "ConfirmedCause"
+      },
+      "ContextExtractRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Query"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "ContextExtractRequest",
+        "description": "POST /api/v1/context/extract 请求体(单独跑 F1 槽位提取)。",
+        "examples": [
+          {
+            "query": "捷豹报B1219-15",
+            "vehicle_info": {
+              "brand": "捷豹",
+              "dtc_codes": [
+                "B1219-15"
+              ]
+            }
+          }
+        ]
+      },
+      "ContextExtractResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "请求 ID,与 X-Request-ID 响应头一致"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms",
+            "description": "服务端耗时(毫秒)"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note",
+            "description": "结果不完整时的说明"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info",
+            "description": "请求中缺失的必需字段路径"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "elapsed_ms"
+        ],
+        "title": "ContextExtractResponse",
+        "description": "POST /api/v1/context/extract 响应体。",
+        "examples": [
+          {
+            "context": {
+              "brand": "捷豹",
+              "confidence": 0.8,
+              "dtc_categories": [
+                "车身系统"
+              ],
+              "dtc_codes": [
+                "B1219-15"
+              ],
+              "raw_dtc_codes": [
+                "B1219-15"
+              ],
+              "raw_query": "捷豹报B1219-15",
+              "source": "mixed",
+              "symptom_keywords": []
+            },
+            "elapsed_ms": 3,
+            "request_id": "ab12cd34ef56"
+          }
+        ]
+      },
+      "ContextOut": {
+        "properties": {
+          "raw_query": {
+            "type": "string",
+            "title": "Raw Query",
+            "description": "原始 query"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "规范化后的故障码(大写、标准位)"
+          },
+          "raw_dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Raw Dtc Codes",
+            "description": "原文故障码(可能含异常格式,如 P042000)"
+          },
+          "dtc_categories": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "动力系统",
+                "底盘系统",
+                "车身系统",
+                "网络通讯系统"
+              ]
+            },
+            "type": "array",
+            "title": "Dtc Categories",
+            "description": "查询涉及的 PCBU 一级分类（优先由 DTC 码派生；无 DTC 时可来自 vehicle_info）"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand",
+            "description": "品牌槽位"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "车型槽位"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "年款槽位"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "二级系统名槽位，不用于反推 PCBU 一级分类"
+          },
+          "symptom_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symptom Keywords",
+            "description": "现象关键词"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "vehicle_info",
+              "llm_supplemented",
+              "rule",
+              "mixed"
+            ],
+            "title": "Source",
+            "description": "槽位来源:vehicle_info=设备带入 / rule=纯规则 / llm_supplemented=LLM 补缺 / mixed=混合"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "来源置信度 0–1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw_query",
+          "dtc_codes",
+          "raw_dtc_codes",
+          "symptom_keywords",
+          "source",
+          "confidence"
+        ],
+        "title": "ContextOut",
+        "description": "F1 槽位提取结果(检索约束的落地值)。"
+      },
+      "CostEstimate": {
+        "properties": {
+          "parts_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parts Cost"
+          },
+          "labor_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Cost"
+          },
+          "total_cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "price_database",
+                  "quotation_system",
+                  "case_work_order",
+                  "llm_generated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Source Confidence"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_confidence"
+        ],
+        "title": "CostEstimate"
+      },
+      "DataStreamValue": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "title": "DataStreamValue"
+      },
+      "DiagnoseRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Query",
+            "description": "自然语言故障描述"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_n": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Top N",
+            "description": "每组返回 Top-N 候选原因",
+            "default": 5
+          },
+          "enable_reranker": {
+            "type": "boolean",
+            "title": "Enable Reranker",
+            "description": "是否启用 Cross-Encoder 精排",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "DiagnoseRequest",
+        "description": "POST /api/v1/diagnoses 请求体。",
+        "examples": [
+          {
+            "enable_reranker": true,
+            "query": "福特蒙迪欧2016款报P2089加速无力",
+            "top_n": 5,
+            "vehicle_info": {
+              "brand": "福特",
+              "dtc_codes": [
+                "P2089"
+              ],
+              "model": "蒙迪欧",
+              "year": "2016"
+            }
+          }
+        ]
+      },
+      "DiagnoseResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/GroupResultOut"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms"
+          },
+          "reranker_degraded": {
+            "type": "boolean",
+            "title": "Reranker Degraded",
+            "description": "Reranker 是否降级；true 表示仅使用规则分排序",
+            "default": false
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note",
+            "description": "结果不完整时的说明"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info",
+            "description": "请求中缺失的必需字段路径"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "groups",
+          "results",
+          "elapsed_ms"
+        ],
+        "title": "DiagnoseResponse",
+        "description": "POST /api/v1/diagnoses 响应体。"
+      },
+      "DiagnosticInspectionResult": {
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "title": "Check Id"
+          },
+          "result_type": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "abnormal",
+              "inconclusive"
+            ],
+            "title": "Result Type"
+          },
+          "result_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Detail"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_id",
+          "result_type"
+        ],
+        "title": "DiagnosticInspectionResult"
+      },
+      "DiagnosticPlan": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "dtc_group",
+              "single_dtc",
+              "symptom_case"
+            ],
+            "title": "Target Type"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtcs"
+          },
+          "symptom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom Description"
+          },
+          "dtc_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "no_dtc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Result"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "ranked_checks": {
+            "items": {
+              "$ref": "#/components/schemas/RankedCheck"
+            },
+            "type": "array",
+            "title": "Ranked Checks"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "ranked_checks"
+        ],
+        "title": "DiagnosticPlan"
+      },
+      "DiagnosticPlanningToolInput": {
+        "properties": {
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "retrieve_checks",
+                  "rank_checks"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation",
+            "description": "兼容字段；省略时，有候选检查项则排序，否则自动检索并排序。rank_checks 缺少 candidate_checks 但存在 ranked_causes 时也会自动补检索。",
+            "deprecated": true
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dtc_group",
+                  "single_dtc",
+                  "symptom_case"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type",
+            "description": "兼容字段；省略时根据 group_id、dtcs 或 symptom_description 自动推导。",
+            "deprecated": true
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtcs"
+          },
+          "symptom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom Description"
+          },
+          "dtc_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "no_dtc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Result"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "ranked_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosticRankedCause"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranked Causes"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_checks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CheckCandidate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Checks"
+          },
+          "inspection_results": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosticInspectionResult"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspection Results"
+          }
+        },
+        "type": "object",
+        "title": "DiagnosticPlanningToolInput"
+      },
+      "DiagnosticPlanningToolOutput": {
+        "properties": {
+          "candidate_checks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CheckCandidate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Checks"
+          },
+          "diagnostic_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "title": "DiagnosticPlanningToolOutput"
+      },
+      "DiagnosticRankedCause": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "temporary_cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "cause_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "structured_reason_data",
+                  "retrieved_oem_document",
+                  "llm_generated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Source"
+          },
+          "supported_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Dtcs"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Priority"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence"
+          },
+          "ranking_basis": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ranking Basis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_name",
+          "priority",
+          "confidence"
+        ],
+        "title": "DiagnosticRankedCause"
+      },
+      "DtcContextData": {
+        "properties": {
+          "dtc_code": {
+            "type": "string",
+            "title": "Dtc Code"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "dtc_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Description"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "PCBU 一级分类下的二级系统名"
+          },
+          "subsystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subsystem"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "related_datastreams": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Datastreams"
+          },
+          "interpretation_type": {
+            "type": "string",
+            "enum": [
+              "generic_obd",
+              "brand_specific",
+              "uncertain"
+            ],
+            "title": "Interpretation Type"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "generic_obd_database",
+              "brand_dtc_data",
+              "dtc_database",
+              "llm_generated"
+            ],
+            "title": "Source Type"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dtc_code",
+          "interpretation_type",
+          "source_type",
+          "confidence"
+        ],
+        "title": "DtcContextData"
+      },
+      "DtcContextToolInput": {
+        "properties": {
+          "dtc_code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dtc Code"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DtcContextVehicleInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "dtc_code"
+        ],
+        "title": "DtcContextToolInput"
+      },
+      "DtcContextToolOutput": {
+        "properties": {
+          "dtc_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DtcContextData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "title": "DtcContextToolOutput"
+      },
+      "DtcContextVehicleInfo": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "PCBU 一级分类下的二级系统名"
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vin"
+          },
+          "configuration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration"
+          }
+        },
+        "type": "object",
+        "title": "DtcContextVehicleInfo"
+      },
+      "DtcEntry": {
+        "properties": {
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id",
+            "description": "可选知识记录 ID"
+          },
+          "dtc_code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dtc Code"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "省略时由 dtc_code 的 PCBU 首字母自动派生"
+          },
+          "system": {
+            "type": "string",
+            "minLength": 1,
+            "title": "System",
+            "description": "一级分类下的二级系统名"
+          },
+          "related_parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Parts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dtc_code",
+          "system",
+          "related_parts"
+        ],
+        "title": "DtcEntry"
+      },
+      "DtcGroupData": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "group_name": {
+            "type": "string",
+            "title": "Group Name",
+            "description": "中台兼容组名；新调用方优先使用 group_names",
+            "deprecated": true
+          },
+          "representative_dtc": {
+            "type": "string",
+            "title": "Representative Dtc"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes"
+          },
+          "dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtcs",
+            "description": "中台兼容 DTC 列表；新调用方优先使用 dtc_codes",
+            "deprecated": true
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids"
+          },
+          "group_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Group Names",
+            "description": "组名来源：组内各逻辑 DTC 共享的规范化零部件"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "共同二级系统名；跨系统聚类时为 null"
+          },
+          "group_reason": {
+            "type": "string",
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "standalone"
+            ],
+            "title": "Group Reason"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          },
+          "related_parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Related Parts"
+          },
+          "grouping_basis": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grouping Basis"
+          },
+          "grouping_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium"
+            ],
+            "title": "Grouping Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "group_name",
+          "representative_dtc",
+          "dtc_codes",
+          "dtcs",
+          "record_ids",
+          "group_names",
+          "dtc_category",
+          "group_reason",
+          "member_count",
+          "related_parts",
+          "grouping_basis",
+          "grouping_confidence"
+        ],
+        "title": "DtcGroupData"
+      },
+      "DtcGroupRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GroupCandidateIn"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Candidates",
+            "description": "待分组候选记录(1–200 条;超限拒绝)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "DtcGroupRequest",
+        "description": "POST /api/v1/dtc-groups 请求体(独立 DTC 分组服务)。",
+        "examples": [
+          {
+            "candidates": [
+              {
+                "brand": "福特",
+                "dtc_category": "动力系统",
+                "dtc_code": "P2089",
+                "parts": [
+                  "VCT电磁阀"
+                ],
+                "record_id": 95,
+                "system": "发动机控制系统"
+              },
+              {
+                "brand": "福特",
+                "dtc_category": "动力系统",
+                "dtc_code": "P2089",
+                "parts": [
+                  "VCT电磁阀",
+                  "线束"
+                ],
+                "record_id": 96,
+                "system": "发动机控制系统"
+              }
+            ]
+          }
+        ]
+      },
+      "DtcGroupResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "请求 ID,与 X-Request-ID 响应头一致"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "title": "Elapsed Ms",
+            "description": "服务端耗时(毫秒)"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note",
+            "description": "结果不完整时的说明"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info",
+            "description": "请求中缺失的必需字段路径"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "groups",
+          "elapsed_ms"
+        ],
+        "title": "DtcGroupResponse",
+        "description": "POST /api/v1/dtc-groups 响应体。",
+        "examples": [
+          {
+            "elapsed_ms": 3,
+            "groups": [
+              {
+                "dtc_category": "动力系统",
+                "dtc_codes": [
+                  "P2089"
+                ],
+                "group_id": "0a1b2c3d4e5f",
+                "group_names": [
+                  "VCT电磁阀"
+                ],
+                "group_reason": "same_code",
+                "member_count": 2,
+                "record_ids": [
+                  95,
+                  96
+                ],
+                "representative_dtc": "P2089",
+                "system": "发动机控制系统"
+              }
+            ],
+            "request_id": "ab12cd34ef56"
+          }
+        ]
+      },
+      "DtcGroupingToolInput": {
+        "properties": {
+          "dtc_list": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Dtc List",
+            "description": "待分组的 DTC 列表；至少需要两个不同 DTC，单个 DTC 请使用 dtc_context_service。"
+          },
+          "brand": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Brand"
+          },
+          "dtc_entries": {
+            "items": {
+              "$ref": "#/components/schemas/DtcEntry"
+            },
+            "type": "array",
+            "title": "Dtc Entries"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "dtc_list",
+          "brand",
+          "dtc_entries"
+        ],
+        "title": "DtcGroupingToolInput"
+      },
+      "DtcGroupingToolOutput": {
+        "properties": {
+          "dtc_groups": {
+            "items": {
+              "$ref": "#/components/schemas/DtcGroupData"
+            },
+            "type": "array",
+            "title": "Dtc Groups"
+          },
+          "independent_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Independent Dtcs"
+          },
+          "grouping_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grouping Result"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dtc_groups",
+          "independent_dtcs"
+        ],
+        "title": "DtcGroupingToolOutput"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors",
+            "description": "422 校验错误详情"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "统一错误响应。"
+      },
+      "GroupCandidateIn": {
+        "properties": {
+          "record_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Record Id",
+            "description": "知识库记录 ID"
+          },
+          "dtc_code": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Dtc Code",
+            "description": "故障码,如 P2089"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand",
+            "description": "品牌"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类；省略时由 dtc_code 自动派生"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "一级分类下的二级系统名"
+          },
+          "parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Parts",
+            "description": "零件列表"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "dtc_code"
+        ],
+        "title": "GroupCandidateIn",
+        "description": "POST /api/v1/dtc-groups 的单条候选记录(最小必要字段)。"
+      },
+      "GroupOut": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id",
+            "description": "组 ID(成员 record_ids 哈希)"
+          },
+          "representative_dtc": {
+            "type": "string",
+            "title": "Representative Dtc",
+            "description": "组内代表故障码(频次最高)"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "组内全部故障码"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids",
+            "description": "组内知识库记录 ID"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "组内共同二级系统名；跨系统聚类时为 null"
+          },
+          "group_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Group Names",
+            "description": "组名来源：组内各逻辑 DTC 共享的规范化零部件"
+          },
+          "group_reason": {
+            "type": "string",
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "standalone"
+            ],
+            "title": "Group Reason",
+            "description": "分组依据:same_code=同故障码 / same_system_shared_parts=同二级系统且零件有交集 / shared_parts=跨二级系统但规范化零件有交集 / standalone=独立成组"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "description": "组内记录数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "representative_dtc",
+          "dtc_codes",
+          "record_ids",
+          "group_names",
+          "group_reason",
+          "member_count"
+        ],
+        "title": "GroupOut",
+        "description": "DTC 分组元数据。"
+      },
+      "GroupResultOut": {
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/GroupOut"
+          },
+          "ranked_causes": {
+            "items": {
+              "$ref": "#/components/schemas/RankedCauseOut"
+            },
+            "type": "array",
+            "title": "Ranked Causes"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "ranked_causes",
+          "truncated"
+        ],
+        "title": "GroupResultOut",
+        "description": "一个 DTC 组的排序结果。"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthComponents": {
+        "properties": {
+          "mysql": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "milvus": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "reranker": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mysql",
+          "milvus",
+          "embedding",
+          "reranker",
+          "llm"
+        ],
+        "title": "HealthComponents",
+        "description": "深度健康检查的固定五组件。"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded",
+              "unhealthy"
+            ],
+            "title": "Status",
+            "description": "healthy=全组件正常 / degraded=部分降级但可用 / unhealthy=MySQL 不可用"
+          },
+          "components": {
+            "$ref": "#/components/schemas/HealthComponents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "components"
+        ],
+        "title": "HealthResponse",
+        "description": "GET /api/v1/health 响应体。"
+      },
+      "InspectionOut": {
+        "properties": {
+          "check_item": {
+            "type": "string",
+            "title": "Check Item"
+          },
+          "judgment_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgment Basis"
+          },
+          "operation_tip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Tip"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_item"
+        ],
+        "title": "InspectionOut"
+      },
+      "InspectionResult": {
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "InspectionResult"
+      },
+      "LaborEstimate": {
+        "properties": {
+          "estimated_time": {
+            "type": "string",
+            "title": "Estimated Time"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "labor_database",
+                  "standard_repair_data",
+                  "case_work_order",
+                  "llm_generated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Source Confidence"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "estimated_time",
+          "source_confidence"
+        ],
+        "title": "LaborEstimate"
+      },
+      "LivenessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "alive",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LivenessResponse",
+        "description": "GET /api/v1/live 响应体。"
+      },
+      "PartsAndToolsOut": {
+        "properties": {
+          "reference_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Price"
+          },
+          "required_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tools"
+          },
+          "labor_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Hours"
+          }
+        },
+        "type": "object",
+        "title": "PartsAndToolsOut"
+      },
+      "RankCandidateIn": {
+        "properties": {
+          "record_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Record Id",
+            "description": "知识库记录 ID"
+          },
+          "dtc_code": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Dtc Code",
+            "description": "故障码,如 P2089"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "pattern": "^\\d{4}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类；省略时由 dtc_code 自动派生"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "一级分类下的二级系统名"
+          },
+          "fault_symptom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault Symptom",
+            "description": "故障现象"
+          },
+          "possible_cause": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Possible Cause",
+            "description": "可能原因"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition",
+            "description": "触发条件"
+          },
+          "parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Parts",
+            "description": "零件列表"
+          },
+          "recommended_check": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Check",
+            "description": "检查项"
+          },
+          "repair_solution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Solution",
+            "description": "维修方案"
+          },
+          "repair_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Method",
+            "description": "维修方法"
+          },
+          "labor_hours": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Hours",
+            "description": "工时(小时)"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price",
+            "description": "价格(元)"
+          },
+          "oem_doc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc",
+            "description": "OEM 维修手册名"
+          },
+          "oem_doc_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc Url",
+            "description": "OEM 手册链接"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "dtc_code"
+        ],
+        "title": "RankCandidateIn",
+        "description": "POST /api/v1/candidate-causes/rank 的单条待排序候选。\n\n排序字段(dtc_code/dtc_category/brand/model/year/system/fault_symptom/possible_cause/trigger_condition)\n参与规则分与 Reranker 打分;展示字段(recommended_check/repair_solution/...)\n不参与排序,原样透传到响应。"
+      },
+      "RankedCause": {
+        "properties": {
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "temporary_cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "cause_source": {
+            "type": "string",
+            "enum": [
+              "structured_reason_data",
+              "retrieved_oem_document",
+              "llm_generated"
+            ],
+            "title": "Cause Source"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "supported_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supported Dtcs"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Priority"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence"
+          },
+          "ranking_basis": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ranking Basis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_name",
+          "cause_source",
+          "priority",
+          "confidence",
+          "ranking_basis"
+        ],
+        "title": "RankedCause"
+      },
+      "RankedCauseOut": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank",
+            "description": "名次(1 起)"
+          },
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id",
+            "description": "知识库记录 ID(可回查详情)"
+          },
+          "dtc_code": {
+            "type": "string",
+            "title": "Dtc Code",
+            "description": "故障码"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类"
+          },
+          "possible_cause": {
+            "type": "string",
+            "title": "Possible Cause",
+            "description": "可能原因"
+          },
+          "recommended_check": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Check",
+            "description": "检查项"
+          },
+          "repair_solution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Solution",
+            "description": "维修方案"
+          },
+          "repair_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Method",
+            "description": "维修方法"
+          },
+          "parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parts",
+            "description": "零件列表"
+          },
+          "labor_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Hours",
+            "description": "工时(小时)"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price",
+            "description": "价格(元)"
+          },
+          "oem_doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc",
+            "description": "OEM 维修手册名"
+          },
+          "oem_doc_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc Url",
+            "description": "OEM 手册链接"
+          },
+          "final_score": {
+            "type": "number",
+            "title": "Final Score",
+            "description": "最终综合分(降序,越大越相关;降级时等于 rule_score)"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score",
+            "description": "Reranker 语义相关分 [0,1];降级时为 null"
+          },
+          "rule_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Score",
+            "description": "规则分(字段命中 + 文本重叠)"
+          },
+          "score_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "reranker",
+                  "rule_fallback"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Source",
+            "description": "分数来源:reranker=真实精排分 / rule_fallback=降级纯规则分"
+          },
+          "score_breakdown": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Breakdown",
+            "description": "规则分明细(b1_field 字段命中 / b2_jaccard 文本重叠 / jaccard)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "record_id",
+          "dtc_code",
+          "possible_cause",
+          "parts",
+          "final_score"
+        ],
+        "title": "RankedCauseOut",
+        "description": "单条候选原因(已序列化为 JSON 安全类型)。"
+      },
+      "RankedCheck": {
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "title": "Check Id"
+          },
+          "check_name": {
+            "type": "string",
+            "title": "Check Name"
+          },
+          "check_source": {
+            "type": "string",
+            "enum": [
+              "structured_repair_knowledge",
+              "llm_generated"
+            ],
+            "title": "Check Source"
+          },
+          "linked_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Dtcs"
+          },
+          "linked_causes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CauseLink"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Causes"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "check_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Type"
+          },
+          "check_goal": {
+            "type": "string",
+            "title": "Check Goal"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Priority"
+          },
+          "check_cost": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Cost"
+          },
+          "ranking_basis": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ranking Basis"
+          },
+          "judgment_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgment Summary"
+          },
+          "result_branches": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CheckResultBranch"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Branches"
+          },
+          "required_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tools"
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Source Confidence"
+          },
+          "warning_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Note"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_id",
+          "check_name",
+          "check_source",
+          "check_goal",
+          "priority",
+          "ranking_basis",
+          "source_confidence"
+        ],
+        "title": "RankedCheck"
+      },
+      "ReadinessComponents": {
+        "properties": {
+          "mysql": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mysql"
+        ],
+        "title": "ReadinessComponents",
+        "description": "就绪探针只检查服务硬依赖 MySQL。"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy"
+            ],
+            "title": "Status"
+          },
+          "components": {
+            "$ref": "#/components/schemas/ReadinessComponents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "components"
+        ],
+        "title": "ReadinessResponse",
+        "description": "GET /api/v1/ready 响应体。"
+      },
+      "RecurrenceResult": {
+        "properties": {
+          "cleared": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleared"
+          },
+          "recurred": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurred"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "RecurrenceResult"
+      },
+      "RepairFeedback": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "title": "RepairFeedback"
+      },
+      "RepairOut": {
+        "properties": {
+          "steps": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps",
+            "description": "知识库维修指引原文；多个不重复指引按来源顺序换行拼接，不拆分编号步骤"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "title": "RepairOut"
+      },
+      "RepairOutputOptions": {
+        "properties": {
+          "include_labor_price": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Labor Price"
+          }
+        },
+        "type": "object",
+        "title": "RepairOutputOptions"
+      },
+      "RepairPart": {
+        "properties": {
+          "part_name": {
+            "type": "string",
+            "title": "Part Name"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "part_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Number"
+          },
+          "part_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "oem",
+                  "brand",
+                  "aftermarket",
+                  "remanufactured",
+                  "used",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Type"
+          },
+          "price_estimate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Estimate"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "structured_repair_knowledge",
+                  "parts_catalog",
+                  "price_database",
+                  "llm_generated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "part_name"
+        ],
+        "title": "RepairPart"
+      },
+      "RepairPlan": {
+        "properties": {
+          "repair_target": {
+            "$ref": "#/components/schemas/RepairTarget"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dtc_group",
+                  "single_dtc",
+                  "symptom_case",
+                  "user_specified_target"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "repair_solution": {
+            "$ref": "#/components/schemas/RepairSolution"
+          },
+          "repair_method": {
+            "type": "string",
+            "title": "Repair Method"
+          },
+          "parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RepairPart"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parts"
+          },
+          "labor_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LaborEstimate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostEstimate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk Level",
+            "description": "维修风险等级；当前缺少结构化来源时使用联调兼容默认值 low"
+          },
+          "warning_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Note"
+          },
+          "post_repair_validation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Post Repair Validation",
+            "description": "维修完成后的确认步骤；当前缺少结构化来源时使用通用联调兼容话术"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repair_target",
+          "repair_solution",
+          "repair_method",
+          "risk_level",
+          "post_repair_validation"
+        ],
+        "title": "RepairPlan"
+      },
+      "RepairPlanningToolInput": {
+        "properties": {
+          "repair_target": {
+            "$ref": "#/components/schemas/RepairTarget"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "vehicle_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VehicleContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dtc_group",
+                  "single_dtc",
+                  "symptom_case",
+                  "user_specified_target"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtcs"
+          },
+          "symptom_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symptom Description"
+          },
+          "dtc_result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "no_dtc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Result"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "output_options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairOutputOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "repair_target"
+        ],
+        "title": "RepairPlanningToolInput"
+      },
+      "RepairPlanningToolOutput": {
+        "properties": {
+          "repair_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepairPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          },
+          "missing_required_info": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Required Info"
+          }
+        },
+        "type": "object",
+        "title": "RepairPlanningToolOutput"
+      },
+      "RepairSolution": {
+        "properties": {
+          "repair_solution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Solution Id"
+          },
+          "repair_solution_name": {
+            "type": "string",
+            "title": "Repair Solution Name"
+          },
+          "repair_solution_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Solution Description"
+          },
+          "matched_cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Cause Id"
+          },
+          "matched_cause_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Cause Name"
+          },
+          "matched_dtcs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Dtcs"
+          },
+          "matched_symptom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Symptom"
+          },
+          "solution_source": {
+            "type": "string",
+            "enum": [
+              "structured_repair_knowledge",
+              "llm_generated"
+            ],
+            "title": "Solution Source"
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Source Confidence"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repair_solution_name",
+          "solution_source",
+          "source_confidence"
+        ],
+        "title": "RepairSolution"
+      },
+      "RepairTarget": {
+        "properties": {
+          "target_name": {
+            "type": "string",
+            "title": "Target Name"
+          },
+          "target_status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "user_hypothesis",
+              "user_specified_object"
+            ],
+            "title": "Target Status"
+          },
+          "target_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Description"
+          },
+          "cause_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Id"
+          },
+          "related_parts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Parts"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_name",
+          "target_status"
+        ],
+        "title": "RepairTarget"
+      },
+      "ToolDetail": {
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          },
+          "tool_kind": {
+            "type": "string",
+            "title": "Tool Kind"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "skill_name": {
+            "type": "string",
+            "title": "Skill Name"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Schema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool_name",
+          "tool_kind",
+          "description",
+          "skill_name",
+          "input_schema",
+          "output_schema"
+        ],
+        "title": "ToolDetail"
+      },
+      "ToolDetailResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ToolDetail"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "trace_id"
+        ],
+        "title": "ToolDetailResponse"
+      },
+      "ToolInvokeRequest": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments",
+            "description": "工具入参对象，须满足工具详情返回的 input_schema"
+          }
+        },
+        "type": "object",
+        "title": "ToolInvokeRequest"
+      },
+      "ToolInvokeResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trace_id"
+        ],
+        "title": "ToolInvokeResponse"
+      },
+      "ToolListResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ToolSummary"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "trace_id"
+        ],
+        "title": "ToolListResponse"
+      },
+      "ToolSummary": {
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          },
+          "tool_kind": {
+            "type": "string",
+            "title": "Tool Kind"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "skill_name": {
+            "type": "string",
+            "title": "Skill Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool_name",
+          "tool_kind",
+          "description",
+          "skill_name"
+        ],
+        "title": "ToolSummary"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VehicleContext": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vin"
+          },
+          "configuration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration"
+          }
+        },
+        "type": "object",
+        "title": "VehicleContext"
+      },
+      "VehicleInfo": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "pattern": "^\\d{4}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类；提供 DTC 码时必须与首字母一致"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "一级分类下的二级系统名"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Dtc Codes"
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vin"
+          }
+        },
+        "type": "object",
+        "title": "VehicleInfo",
+        "description": "设备带入的结构化车辆上下文(优先级最高)。"
+      },
+      "VerificationItemOut": {
+        "properties": {
+          "order": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order"
+          },
+          "check_item": {
+            "type": "string",
+            "title": "Check Item"
+          },
+          "expected_result": {
+            "type": "string",
+            "title": "Expected Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order",
+          "check_item",
+          "expected_result"
+        ],
+        "title": "VerificationItemOut"
+      },
+      "VerificationOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "generated_by": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "template_fallback"
+            ],
+            "title": "Generated By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "generated_by"
+        ],
+        "title": "VerificationOut"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "综合诊断服务",
+      "description": "端到端诊断检索主接口:召回 + 融合 + 分组 + 排序一体化。"
+    },
+    {
+      "name": "DTC 上下文解析",
+      "description": "F1 槽位提取:从自然语言/车辆信息中解析故障码、品牌、车型等检索约束。"
+    },
+    {
+      "name": "DTC 分组",
+      "description": "先按 PCBU 一级分类隔离，再按同码/规范化零部件交集规则细分，多码组必须存在共同零部件，不经过检索。"
+    },
+    {
+      "name": "候选原因排序",
+      "description": "对给定候选原因做规则重排 + Cross-Encoder 精排 + 断崖截断,不经过检索。"
+    },
+    {
+      "name": "DTC 原因处置卡片",
+      "description": "从未分组 DTC 列表自动检索、按零部件关联分组并生成原因检查维修卡片。"
+    },
+    {
+      "name": "健康检查",
+      "description": "运维探针接口:存活 / 就绪 / 深度健康检查,供 K8s 与监控使用。"
+    },
+    {
+      "name": "dtc_context_service",
+      "description": "强类型 DTC 背景上下文服务，可直接在 Swagger 中试调。"
+    },
+    {
+      "name": "dtc_grouping_service",
+      "description": "强类型多 DTC 聚合分组服务，可直接在 Swagger 中试调。"
+    },
+    {
+      "name": "cause_ranking_service",
+      "description": "强类型候选原因检索与排序服务，可直接在 Swagger 中试调。"
+    },
+    {
+      "name": "diagnostic_planning_service",
+      "description": "强类型诊断检查项检索与计划生成服务。"
+    },
+    {
+      "name": "repair_planning_service",
+      "description": "强类型维修计划生成服务。"
+    }
+  ]
+}

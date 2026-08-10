@@ -1,0 +1,7 @@
+{
+  "arguments": {
+    "brand": "Toyota",
+    "model": "Highlander",
+    "dtc_codes": ["P0420", "P0430", "P0171"]
+  }
+}

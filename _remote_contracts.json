@@ -1,0 +1,4375 @@
+{
+  "dtc_context_service": {
+    "tool_name": "dtc_context_service",
+    "tool_kind": "global_tool_service",
+    "description": "用于将单个 DTC 解析为标准化背景上下文的全局服务。",
+    "skill_name": "dtc-context-skill",
+    "input_schema": {
+      "$defs": {
+        "DtcContextVehicleInfo": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            },
+            "dtc_category": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "动力系统",
+                    "底盘系统",
+                    "车身系统",
+                    "网络通讯系统"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtc Category"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "PCBU 一级分类下的二级系统名",
+              "title": "System"
+            },
+            "vin": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Vin"
+            },
+            "configuration": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Configuration"
+            }
+          },
+          "title": "DtcContextVehicleInfo",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dtc_code": {
+          "minLength": 1,
+          "title": "Dtc Code",
+          "type": "string"
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brand"
+        },
+        "vehicle_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DtcContextVehicleInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "dtc_code"
+      ],
+      "title": "DtcContextToolInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "DtcContextData": {
+          "properties": {
+            "dtc_code": {
+              "title": "Dtc Code",
+              "type": "string"
+            },
+            "brand": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Brand"
+            },
+            "dtc_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtc Description"
+            },
+            "dtc_category": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "动力系统",
+                    "底盘系统",
+                    "车身系统",
+                    "网络通讯系统"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtc Category"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "PCBU 一级分类下的二级系统名",
+              "title": "System"
+            },
+            "subsystem": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Subsystem"
+            },
+            "trigger_condition": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Trigger Condition"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "related_datastreams": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Datastreams"
+            },
+            "interpretation_type": {
+              "enum": [
+                "generic_obd",
+                "brand_specific",
+                "uncertain"
+              ],
+              "title": "Interpretation Type",
+              "type": "string"
+            },
+            "source_type": {
+              "enum": [
+                "generic_obd_database",
+                "brand_dtc_data",
+                "dtc_database",
+                "llm_generated"
+              ],
+              "title": "Source Type",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            },
+            "missing_required_info": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Missing Required Info"
+            }
+          },
+          "required": [
+            "dtc_code",
+            "interpretation_type",
+            "source_type",
+            "confidence"
+          ],
+          "title": "DtcContextData",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dtc_context": {
+          "$ref": "#/$defs/DtcContextData"
+        }
+      },
+      "required": [
+        "dtc_context"
+      ],
+      "title": "DtcContextToolOutput",
+      "type": "object"
+    }
+  },
+  "dtc_grouping_service": {
+    "tool_name": "dtc_grouping_service",
+    "tool_kind": "global_tool_service",
+    "description": "先按 PCBU 一级分类，再按规范化故障零部件交集聚合分组的全局服务，输出 DTC Group 或 independent DTC。",
+    "skill_name": "dtc-grouping-skill",
+    "input_schema": {
+      "$defs": {
+        "DtcEntry": {
+          "properties": {
+            "record_id": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "可选知识记录 ID",
+              "title": "Record Id"
+            },
+            "dtc_code": {
+              "minLength": 1,
+              "title": "Dtc Code",
+              "type": "string"
+            },
+            "dtc_category": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "动力系统",
+                    "底盘系统",
+                    "车身系统",
+                    "网络通讯系统"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "省略时由 dtc_code 的 PCBU 首字母自动派生",
+              "title": "Dtc Category"
+            },
+            "system": {
+              "description": "一级分类下的二级系统名",
+              "minLength": 1,
+              "title": "System",
+              "type": "string"
+            },
+            "related_parts": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Related Parts",
+              "type": "array"
+            }
+          },
+          "required": [
+            "dtc_code",
+            "system",
+            "related_parts"
+          ],
+          "title": "DtcEntry",
+          "type": "object"
+        },
+        "VehicleContext": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            },
+            "engine": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Engine"
+            },
+            "vin": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Vin"
+            },
+            "configuration": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Configuration"
+            }
+          },
+          "title": "VehicleContext",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dtc_list": {
+          "description": "待分组的 DTC 列表；至少需要两个不同 DTC，单个 DTC 请使用 dtc_context_service。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Dtc List",
+          "type": "array"
+        },
+        "brand": {
+          "minLength": 1,
+          "title": "Brand",
+          "type": "string"
+        },
+        "dtc_entries": {
+          "items": {
+            "$ref": "#/$defs/DtcEntry"
+          },
+          "title": "Dtc Entries",
+          "type": "array"
+        },
+        "vehicle_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VehicleContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "dtc_list",
+        "brand",
+        "dtc_entries"
+      ],
+      "title": "DtcGroupingToolInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "DtcGroupData": {
+          "properties": {
+            "group_id": {
+              "title": "Group Id",
+              "type": "string"
+            },
+            "group_name": {
+              "deprecated": true,
+              "description": "中台兼容组名；新调用方优先使用 group_names",
+              "title": "Group Name",
+              "type": "string"
+            },
+            "representative_dtc": {
+              "title": "Representative Dtc",
+              "type": "string"
+            },
+            "dtc_codes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Dtc Codes",
+              "type": "array"
+            },
+            "dtcs": {
+              "deprecated": true,
+              "description": "中台兼容 DTC 列表；新调用方优先使用 dtc_codes",
+              "items": {
+                "type": "string"
+              },
+              "title": "Dtcs",
+              "type": "array"
+            },
+            "record_ids": {
+              "items": {
+                "type": "integer"
+              },
+              "title": "Record Ids",
+              "type": "array"
+            },
+            "group_names": {
+              "description": "组名来源：组内各逻辑 DTC 共享的规范化零部件",
+              "items": {
+                "type": "string"
+              },
+              "title": "Group Names",
+              "type": "array"
+            },
+            "dtc_category": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "动力系统",
+                    "底盘系统",
+                    "车身系统",
+                    "网络通讯系统"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dtc Category"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "共同二级系统名；跨系统聚类时为 null",
+              "title": "System"
+            },
+            "group_reason": {
+              "enum": [
+                "same_code",
+                "same_system_shared_parts",
+                "shared_parts",
+                "standalone"
+              ],
+              "title": "Group Reason",
+              "type": "string"
+            },
+            "member_count": {
+              "title": "Member Count",
+              "type": "integer"
+            },
+            "related_parts": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Related Parts",
+              "type": "array"
+            },
+            "grouping_basis": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Grouping Basis",
+              "type": "array"
+            },
+            "grouping_confidence": {
+              "enum": [
+                "high",
+                "medium"
+              ],
+              "title": "Grouping Confidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id",
+            "group_name",
+            "representative_dtc",
+            "dtc_codes",
+            "dtcs",
+            "record_ids",
+            "group_names",
+            "dtc_category",
+            "group_reason",
+            "member_count",
+            "related_parts",
+            "grouping_basis",
+            "grouping_confidence"
+          ],
+          "title": "DtcGroupData",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "dtc_groups": {
+          "items": {
+            "$ref": "#/$defs/DtcGroupData"
+          },
+          "title": "Dtc Groups",
+          "type": "array"
+        },
+        "independent_dtcs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Independent Dtcs",
+          "type": "array"
+        },
+        "grouping_result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Grouping Result"
+        },
+        "uncertainty_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty Note"
+        },
+        "missing_required_info": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Required Info"
+        }
+      },
+      "required": [
+        "dtc_groups",
+        "independent_dtcs"
+      ],
+      "title": "DtcGroupingToolOutput",
+      "type": "object"
+    }
+  },
+  "cause_ranking_service": {
+    "tool_name": "cause_ranking_service",
+    "tool_kind": "global_tool_service",
+    "description": "针对当前分析对象（DTC Group、single DTC 或 symptom_case）拉取并排序候选原因的全局服务。",
+    "skill_name": "cause-ranking-skill",
+    "input_schema": {
+      "$defs": {
+        "CauseCandidateInput": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "temporary_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temporary Cause Id"
+            },
+            "cause_name": {
+              "title": "Cause Name",
+              "type": "string"
+            },
+            "cause_source": {
+              "enum": [
+                "structured_reason_data",
+                "retrieved_oem_document",
+                "llm_generated"
+              ],
+              "title": "Cause Source",
+              "type": "string"
+            },
+            "source_reference": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Reference"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            }
+          },
+          "required": [
+            "cause_name",
+            "cause_source"
+          ],
+          "title": "CauseCandidateInput",
+          "type": "object"
+        },
+        "DataStreamValue": {
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Name"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Value"
+            },
+            "unit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Unit"
+            }
+          },
+          "title": "DataStreamValue",
+          "type": "object"
+        },
+        "InspectionResult": {
+          "properties": {
+            "item": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Item"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Result"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Note"
+            }
+          },
+          "title": "InspectionResult",
+          "type": "object"
+        },
+        "RankedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "temporary_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temporary Cause Id"
+            },
+            "cause_name": {
+              "title": "Cause Name",
+              "type": "string"
+            },
+            "cause_source": {
+              "enum": [
+                "structured_reason_data",
+                "retrieved_oem_document",
+                "llm_generated"
+              ],
+              "title": "Cause Source",
+              "type": "string"
+            },
+            "source_reference": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Reference"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            },
+            "priority": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Priority",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "ranking_basis": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Ranking Basis",
+              "type": "array"
+            }
+          },
+          "required": [
+            "cause_name",
+            "cause_source",
+            "priority",
+            "confidence",
+            "ranking_basis"
+          ],
+          "title": "RankedCause",
+          "type": "object"
+        },
+        "RecurrenceResult": {
+          "properties": {
+            "cleared": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cleared"
+            },
+            "recurred": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Recurred"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Note"
+            }
+          },
+          "title": "RecurrenceResult",
+          "type": "object"
+        },
+        "RepairFeedback": {
+          "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Action"
+            },
+            "part": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Part"
+            },
+            "outcome": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Outcome"
+            }
+          },
+          "title": "RepairFeedback",
+          "type": "object"
+        },
+        "VehicleContext": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            },
+            "engine": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Engine"
+            },
+            "vin": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Vin"
+            },
+            "configuration": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Configuration"
+            }
+          },
+          "title": "VehicleContext",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "operation": {
+          "enum": [
+            "retrieve_causes",
+            "rank_causes"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "target_type": {
+          "enum": [
+            "dtc_group",
+            "single_dtc",
+            "symptom_case"
+          ],
+          "title": "Target Type",
+          "type": "string"
+        },
+        "group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Id"
+        },
+        "dtcs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtcs"
+        },
+        "symptom_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Symptom Description"
+        },
+        "dtc_result": {
+          "anyOf": [
+            {
+              "enum": [
+                "unknown",
+                "no_dtc"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtc Result"
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brand"
+        },
+        "system": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System"
+        },
+        "related_parts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Parts"
+        },
+        "vehicle_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VehicleContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "candidate_causes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CauseCandidateInput"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Causes"
+        },
+        "datastreams": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DataStreamValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datastreams"
+        },
+        "freeze_frame": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freeze Frame"
+        },
+        "inspection_results": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/InspectionResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inspection Results"
+        },
+        "repair_feedback": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RepairFeedback"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repair Feedback"
+        },
+        "recurrence_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecurrenceResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ranked_causes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RankedCause"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ranked Causes"
+        }
+      },
+      "required": [
+        "operation",
+        "target_type"
+      ],
+      "title": "CauseRankingToolInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "CauseCandidate": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "temporary_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temporary Cause Id"
+            },
+            "cause_name": {
+              "title": "Cause Name",
+              "type": "string"
+            },
+            "cause_source": {
+              "enum": [
+                "structured_reason_data",
+                "retrieved_oem_document",
+                "llm_generated"
+              ],
+              "title": "Cause Source",
+              "type": "string"
+            },
+            "source_reference": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Reference"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "cause_name",
+            "cause_source"
+          ],
+          "title": "CauseCandidate",
+          "type": "object"
+        },
+        "CauseRankingResult": {
+          "properties": {
+            "target_type": {
+              "enum": [
+                "dtc_group",
+                "single_dtc",
+                "symptom_case"
+              ],
+              "title": "Target Type",
+              "type": "string"
+            },
+            "group_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Group Id"
+            },
+            "dtc_result": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unknown",
+                    "no_dtc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtc Result"
+            },
+            "dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtcs"
+            },
+            "symptom_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Symptom Description"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "System"
+            },
+            "ranked_causes": {
+              "items": {
+                "$ref": "#/$defs/RankedCause"
+              },
+              "title": "Ranked Causes",
+              "type": "array"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "target_type",
+            "ranked_causes"
+          ],
+          "title": "CauseRankingResult",
+          "type": "object"
+        },
+        "RankedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "temporary_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temporary Cause Id"
+            },
+            "cause_name": {
+              "title": "Cause Name",
+              "type": "string"
+            },
+            "cause_source": {
+              "enum": [
+                "structured_reason_data",
+                "retrieved_oem_document",
+                "llm_generated"
+              ],
+              "title": "Cause Source",
+              "type": "string"
+            },
+            "source_reference": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Reference"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            },
+            "priority": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Priority",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "ranking_basis": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Ranking Basis",
+              "type": "array"
+            }
+          },
+          "required": [
+            "cause_name",
+            "cause_source",
+            "priority",
+            "confidence",
+            "ranking_basis"
+          ],
+          "title": "RankedCause",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "candidate_causes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CauseCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Causes"
+        },
+        "ranking_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CauseRankingResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "uncertainty_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty Note"
+        },
+        "missing_required_info": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Required Info"
+        }
+      },
+      "title": "CauseRankingToolOutput",
+      "type": "object"
+    }
+  },
+  "diagnostic_planning_service": {
+    "tool_name": "diagnostic_planning_service",
+    "tool_kind": "global_tool_service",
+    "description": "基于结构化维修知识、候选原因排序和当前上下文，拉取并排序诊断检查项，输出诊断检查计划的全局服务。",
+    "skill_name": "diagnostic-planning-skill",
+    "input_schema": {
+      "$defs": {
+        "AffectedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            }
+          },
+          "title": "AffectedCause",
+          "type": "object"
+        },
+        "CauseLink": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            },
+            "cause_priority": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Priority"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            }
+          },
+          "title": "CauseLink",
+          "type": "object"
+        },
+        "CheckCandidate": {
+          "properties": {
+            "check_id": {
+              "title": "Check Id",
+              "type": "string"
+            },
+            "check_name": {
+              "title": "Check Name",
+              "type": "string"
+            },
+            "check_source": {
+              "enum": [
+                "structured_repair_knowledge",
+                "llm_generated"
+              ],
+              "title": "Check Source",
+              "type": "string"
+            },
+            "linked_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Dtcs"
+            },
+            "linked_causes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CauseLink"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Causes"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "check_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Type"
+            },
+            "check_goal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Goal"
+            },
+            "structured_order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Structured Order"
+            },
+            "prerequisite_check_ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Prerequisite Check Ids"
+            },
+            "judgment_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Judgment Summary"
+            },
+            "result_branches": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CheckResultBranch"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Result Branches"
+            },
+            "check_cost": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Cost"
+            },
+            "required_tools": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Required Tools"
+            },
+            "source_confidence": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Confidence"
+            },
+            "warning_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Warning Note"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "check_id",
+            "check_name",
+            "check_source"
+          ],
+          "title": "CheckCandidate",
+          "type": "object"
+        },
+        "CheckResultBranch": {
+          "properties": {
+            "result_type": {
+              "enum": [
+                "normal",
+                "abnormal",
+                "inconclusive"
+              ],
+              "title": "Result Type",
+              "type": "string"
+            },
+            "judgment_condition": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Judgment Condition"
+            },
+            "result_interpretation": {
+              "title": "Result Interpretation",
+              "type": "string"
+            },
+            "affected_causes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/AffectedCause"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affected Causes"
+            },
+            "next_action": {
+              "enum": [
+                "continue_check",
+                "update_cause_ranking",
+                "enter_repair_planning",
+                "ask_user",
+                "human_support"
+              ],
+              "title": "Next Action",
+              "type": "string"
+            },
+            "next_check_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Next Check Id"
+            },
+            "confirmed_cause": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfirmedCause"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "result_type",
+            "result_interpretation",
+            "next_action"
+          ],
+          "title": "CheckResultBranch",
+          "type": "object"
+        },
+        "ConfirmedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            }
+          },
+          "title": "ConfirmedCause",
+          "type": "object"
+        },
+        "DiagnosticInspectionResult": {
+          "properties": {
+            "check_id": {
+              "title": "Check Id",
+              "type": "string"
+            },
+            "result_type": {
+              "enum": [
+                "normal",
+                "abnormal",
+                "inconclusive"
+              ],
+              "title": "Result Type",
+              "type": "string"
+            },
+            "result_detail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Result Detail"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Note"
+            }
+          },
+          "required": [
+            "check_id",
+            "result_type"
+          ],
+          "title": "DiagnosticInspectionResult",
+          "type": "object"
+        },
+        "DiagnosticRankedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "temporary_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temporary Cause Id"
+            },
+            "cause_name": {
+              "title": "Cause Name",
+              "type": "string"
+            },
+            "cause_source": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "structured_reason_data",
+                    "retrieved_oem_document",
+                    "llm_generated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Source"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "priority": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Priority",
+              "type": "string"
+            },
+            "confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "ranking_basis": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Ranking Basis"
+            }
+          },
+          "required": [
+            "cause_name",
+            "priority",
+            "confidence"
+          ],
+          "title": "DiagnosticRankedCause",
+          "type": "object"
+        },
+        "VehicleContext": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            },
+            "engine": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Engine"
+            },
+            "vin": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Vin"
+            },
+            "configuration": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Configuration"
+            }
+          },
+          "title": "VehicleContext",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "operation": {
+          "enum": [
+            "retrieve_checks",
+            "rank_checks"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "target_type": {
+          "enum": [
+            "dtc_group",
+            "single_dtc",
+            "symptom_case"
+          ],
+          "title": "Target Type",
+          "type": "string"
+        },
+        "group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Id"
+        },
+        "dtcs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtcs"
+        },
+        "symptom_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Symptom Description"
+        },
+        "dtc_result": {
+          "anyOf": [
+            {
+              "enum": [
+                "unknown",
+                "no_dtc"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtc Result"
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brand"
+        },
+        "system": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System"
+        },
+        "ranked_causes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DiagnosticRankedCause"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ranked Causes"
+        },
+        "related_parts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Parts"
+        },
+        "vehicle_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VehicleContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "candidate_checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CheckCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Checks"
+        },
+        "inspection_results": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DiagnosticInspectionResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inspection Results"
+        }
+      },
+      "required": [
+        "operation",
+        "target_type"
+      ],
+      "title": "DiagnosticPlanningToolInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "AffectedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            }
+          },
+          "title": "AffectedCause",
+          "type": "object"
+        },
+        "CauseLink": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            },
+            "cause_priority": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Priority"
+            },
+            "supported_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Supported Dtcs"
+            }
+          },
+          "title": "CauseLink",
+          "type": "object"
+        },
+        "CheckCandidate": {
+          "properties": {
+            "check_id": {
+              "title": "Check Id",
+              "type": "string"
+            },
+            "check_name": {
+              "title": "Check Name",
+              "type": "string"
+            },
+            "check_source": {
+              "enum": [
+                "structured_repair_knowledge",
+                "llm_generated"
+              ],
+              "title": "Check Source",
+              "type": "string"
+            },
+            "linked_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Dtcs"
+            },
+            "linked_causes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CauseLink"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Causes"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "check_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Type"
+            },
+            "check_goal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Goal"
+            },
+            "structured_order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Structured Order"
+            },
+            "prerequisite_check_ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Prerequisite Check Ids"
+            },
+            "judgment_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Judgment Summary"
+            },
+            "result_branches": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CheckResultBranch"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Result Branches"
+            },
+            "check_cost": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Cost"
+            },
+            "required_tools": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Required Tools"
+            },
+            "source_confidence": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Confidence"
+            },
+            "warning_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Warning Note"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "check_id",
+            "check_name",
+            "check_source"
+          ],
+          "title": "CheckCandidate",
+          "type": "object"
+        },
+        "CheckResultBranch": {
+          "properties": {
+            "result_type": {
+              "enum": [
+                "normal",
+                "abnormal",
+                "inconclusive"
+              ],
+              "title": "Result Type",
+              "type": "string"
+            },
+            "judgment_condition": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Judgment Condition"
+            },
+            "result_interpretation": {
+              "title": "Result Interpretation",
+              "type": "string"
+            },
+            "affected_causes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/AffectedCause"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Affected Causes"
+            },
+            "next_action": {
+              "enum": [
+                "continue_check",
+                "update_cause_ranking",
+                "enter_repair_planning",
+                "ask_user",
+                "human_support"
+              ],
+              "title": "Next Action",
+              "type": "string"
+            },
+            "next_check_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Next Check Id"
+            },
+            "confirmed_cause": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ConfirmedCause"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "result_type",
+            "result_interpretation",
+            "next_action"
+          ],
+          "title": "CheckResultBranch",
+          "type": "object"
+        },
+        "ConfirmedCause": {
+          "properties": {
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Name"
+            }
+          },
+          "title": "ConfirmedCause",
+          "type": "object"
+        },
+        "DiagnosticPlan": {
+          "properties": {
+            "target_type": {
+              "enum": [
+                "dtc_group",
+                "single_dtc",
+                "symptom_case"
+              ],
+              "title": "Target Type",
+              "type": "string"
+            },
+            "group_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Group Id"
+            },
+            "dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtcs"
+            },
+            "symptom_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Symptom Description"
+            },
+            "dtc_result": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unknown",
+                    "no_dtc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Dtc Result"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "System"
+            },
+            "ranked_checks": {
+              "items": {
+                "$ref": "#/$defs/RankedCheck"
+              },
+              "title": "Ranked Checks",
+              "type": "array"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "target_type",
+            "ranked_checks"
+          ],
+          "title": "DiagnosticPlan",
+          "type": "object"
+        },
+        "RankedCheck": {
+          "properties": {
+            "check_id": {
+              "title": "Check Id",
+              "type": "string"
+            },
+            "check_name": {
+              "title": "Check Name",
+              "type": "string"
+            },
+            "check_source": {
+              "enum": [
+                "structured_repair_knowledge",
+                "llm_generated"
+              ],
+              "title": "Check Source",
+              "type": "string"
+            },
+            "linked_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Dtcs"
+            },
+            "linked_causes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CauseLink"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Linked Causes"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "check_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Type"
+            },
+            "check_goal": {
+              "title": "Check Goal",
+              "type": "string"
+            },
+            "priority": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Priority",
+              "type": "string"
+            },
+            "check_cost": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Check Cost"
+            },
+            "ranking_basis": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Ranking Basis",
+              "type": "array"
+            },
+            "judgment_summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Judgment Summary"
+            },
+            "result_branches": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CheckResultBranch"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Result Branches"
+            },
+            "required_tools": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Required Tools"
+            },
+            "source_confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Source Confidence",
+              "type": "string"
+            },
+            "warning_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Warning Note"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "check_id",
+            "check_name",
+            "check_source",
+            "check_goal",
+            "priority",
+            "ranking_basis",
+            "source_confidence"
+          ],
+          "title": "RankedCheck",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "candidate_checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CheckCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidate Checks"
+        },
+        "diagnostic_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "uncertainty_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty Note"
+        },
+        "missing_required_info": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Required Info"
+        }
+      },
+      "title": "DiagnosticPlanningToolOutput",
+      "type": "object"
+    }
+  },
+  "repair_planning_service": {
+    "tool_name": "repair_planning_service",
+    "tool_kind": "global_tool_service",
+    "description": "基于明确的 repair_target，从结构化维修知识中查询维修方案、维修方法、零件、工时和价格，输出 repair_plan 的全局服务。",
+    "skill_name": "repair-planning-skill",
+    "input_schema": {
+      "$defs": {
+        "RepairOutputOptions": {
+          "properties": {
+            "include_labor_price": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Include Labor Price"
+            }
+          },
+          "title": "RepairOutputOptions",
+          "type": "object"
+        },
+        "RepairTarget": {
+          "properties": {
+            "target_name": {
+              "title": "Target Name",
+              "type": "string"
+            },
+            "target_status": {
+              "enum": [
+                "confirmed",
+                "user_hypothesis",
+                "user_specified_object"
+              ],
+              "title": "Target Status",
+              "type": "string"
+            },
+            "target_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Description"
+            },
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source"
+            }
+          },
+          "required": [
+            "target_name",
+            "target_status"
+          ],
+          "title": "RepairTarget",
+          "type": "object"
+        },
+        "VehicleContext": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Model"
+            },
+            "year": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Year"
+            },
+            "engine": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Engine"
+            },
+            "vin": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Vin"
+            },
+            "configuration": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Configuration"
+            }
+          },
+          "title": "VehicleContext",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "repair_target": {
+          "$ref": "#/$defs/RepairTarget"
+        },
+        "brand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brand"
+        },
+        "vehicle_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VehicleContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "dtc_group",
+                "single_dtc",
+                "symptom_case",
+                "user_specified_target"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Type"
+        },
+        "dtcs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtcs"
+        },
+        "symptom_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Symptom Description"
+        },
+        "dtc_result": {
+          "anyOf": [
+            {
+              "enum": [
+                "unknown",
+                "no_dtc"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dtc Result"
+        },
+        "group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group Id"
+        },
+        "system": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System"
+        },
+        "related_parts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Parts"
+        },
+        "output_options": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepairOutputOptions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "repair_target"
+      ],
+      "title": "RepairPlanningToolInput",
+      "type": "object"
+    },
+    "output_schema": {
+      "$defs": {
+        "CostEstimate": {
+          "properties": {
+            "parts_cost": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Parts Cost"
+            },
+            "labor_cost": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Labor Cost"
+            },
+            "total_cost": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Total Cost"
+            },
+            "currency": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Currency"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "price_database",
+                    "quotation_system",
+                    "case_work_order",
+                    "llm_generated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source"
+            },
+            "source_confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Source Confidence",
+              "type": "string"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "source_confidence"
+          ],
+          "title": "CostEstimate",
+          "type": "object"
+        },
+        "LaborEstimate": {
+          "properties": {
+            "estimated_time": {
+              "title": "Estimated Time",
+              "type": "string"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "labor_database",
+                    "standard_repair_data",
+                    "case_work_order",
+                    "llm_generated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source"
+            },
+            "source_confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Source Confidence",
+              "type": "string"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "estimated_time",
+            "source_confidence"
+          ],
+          "title": "LaborEstimate",
+          "type": "object"
+        },
+        "RepairPart": {
+          "properties": {
+            "part_name": {
+              "title": "Part Name",
+              "type": "string"
+            },
+            "quantity": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Quantity"
+            },
+            "part_number": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Part Number"
+            },
+            "part_type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "oem",
+                    "brand",
+                    "aftermarket",
+                    "remanufactured",
+                    "used",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Part Type"
+            },
+            "price_estimate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Estimate"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "structured_repair_knowledge",
+                    "parts_catalog",
+                    "price_database",
+                    "llm_generated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "part_name"
+          ],
+          "title": "RepairPart",
+          "type": "object"
+        },
+        "RepairPlan": {
+          "properties": {
+            "repair_target": {
+              "$ref": "#/$defs/RepairTarget"
+            },
+            "target_type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "dtc_group",
+                    "single_dtc",
+                    "symptom_case",
+                    "user_specified_target"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Type"
+            },
+            "repair_solution": {
+              "$ref": "#/$defs/RepairSolution"
+            },
+            "repair_method": {
+              "title": "Repair Method",
+              "type": "string"
+            },
+            "parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/RepairPart"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Parts"
+            },
+            "labor_estimate": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LaborEstimate"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "cost_estimate": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CostEstimate"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "risk_level": {
+              "description": "维修风险等级；当前缺少结构化来源时使用联调兼容默认值 low",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "title": "Risk Level",
+              "type": "string"
+            },
+            "warning_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Warning Note"
+            },
+            "post_repair_validation": {
+              "description": "维修完成后的确认步骤；当前缺少结构化来源时使用通用联调兼容话术",
+              "minLength": 1,
+              "title": "Post Repair Validation",
+              "type": "string"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "repair_target",
+            "repair_solution",
+            "repair_method",
+            "risk_level",
+            "post_repair_validation"
+          ],
+          "title": "RepairPlan",
+          "type": "object"
+        },
+        "RepairSolution": {
+          "properties": {
+            "repair_solution_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Repair Solution Id"
+            },
+            "repair_solution_name": {
+              "title": "Repair Solution Name",
+              "type": "string"
+            },
+            "repair_solution_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Repair Solution Description"
+            },
+            "matched_cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Cause Id"
+            },
+            "matched_cause_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Cause Name"
+            },
+            "matched_dtcs": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Dtcs"
+            },
+            "matched_symptom": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Symptom"
+            },
+            "solution_source": {
+              "enum": [
+                "structured_repair_knowledge",
+                "llm_generated"
+              ],
+              "title": "Solution Source",
+              "type": "string"
+            },
+            "source_confidence": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Source Confidence",
+              "type": "string"
+            },
+            "uncertainty_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Uncertainty Note"
+            }
+          },
+          "required": [
+            "repair_solution_name",
+            "solution_source",
+            "source_confidence"
+          ],
+          "title": "RepairSolution",
+          "type": "object"
+        },
+        "RepairTarget": {
+          "properties": {
+            "target_name": {
+              "title": "Target Name",
+              "type": "string"
+            },
+            "target_status": {
+              "enum": [
+                "confirmed",
+                "user_hypothesis",
+                "user_specified_object"
+              ],
+              "title": "Target Status",
+              "type": "string"
+            },
+            "target_description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Target Description"
+            },
+            "cause_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cause Id"
+            },
+            "related_parts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Related Parts"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source"
+            }
+          },
+          "required": [
+            "target_name",
+            "target_status"
+          ],
+          "title": "RepairTarget",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "repair_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepairPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "uncertainty_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty Note"
+        },
+        "missing_required_info": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Required Info"
+        }
+      },
+      "title": "RepairPlanningToolOutput",
+      "type": "object"
+    }
+  },
+  "diagnose_service": null,
+  "maintenance_light_reset_service": null
+}

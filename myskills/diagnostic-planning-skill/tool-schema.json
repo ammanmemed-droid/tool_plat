@@ -1,0 +1,558 @@
+{
+  "tool_name": "diagnostic_planning_service",
+  "tool_kind": "global_tool_service",
+  "description": "基于结构化维修知识、候选原因排序和当前上下文，拉取并排序诊断检查项，输出诊断检查计划的全局服务。",
+  "input_schema": {
+    "type": "object",
+    "required": ["operation", "target_type"],
+    "properties": {
+      "operation": {
+        "type": "string",
+        "enum": ["retrieve_checks", "rank_checks"],
+        "description": "内部执行指令：retrieve_checks 拉取候选检查项，rank_checks 排序候选检查项"
+      },
+      "target_type": {
+        "type": "string",
+        "enum": ["dtc_group", "single_dtc", "symptom_case"],
+        "description": "当前分析对象类型"
+      },
+      "group_id": {
+        "type": "string",
+        "description": "DTC 分组 ID；target_type 为 dtc_group 时必填"
+      },
+      "dtcs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "DTC 列表；target_type 为 dtc_group 或 single_dtc 时必填；symptom_case 时可为空"
+      },
+      "symptom_description": {
+        "type": "string",
+        "description": "故障现象描述；target_type 为 symptom_case 时必填；DTC 场景下可作为可选增强信息"
+      },
+      "dtc_result": {
+        "type": "string",
+        "enum": ["unknown", "no_dtc"],
+        "description": "DTC 结果状态；target_type 为 symptom_case 时必填"
+      },
+      "brand": {
+        "type": "string",
+        "description": "车辆品牌，用于匹配品牌相关检查项和诊断流程"
+      },
+      "system": {
+        "type": "string",
+        "description": "当前分析对象所属系统，用于限定检查项拉取范围"
+      },
+      "ranked_causes": {
+        "type": "array",
+        "description": "来自 Cause Ranking 的排序候选原因；retrieve_checks 和 rank_checks 均必填",
+        "items": {
+          "type": "object",
+          "required": ["cause_name", "priority", "confidence"],
+          "properties": {
+            "cause_id": { "type": "string" },
+            "temporary_cause_id": { "type": "string" },
+            "cause_name": { "type": "string" },
+            "cause_source": {
+              "type": "string",
+              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
+            },
+            "supported_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "priority": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "ranking_basis": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "related_parts": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "当前分析对象涉及的零件、模块、线路、传感器、执行器或检测对象"
+      },
+      "vehicle_info": {
+        "type": "object",
+        "description": "可选车辆上下文，用于提高检查项匹配准确性",
+        "properties": {
+          "model": { "type": "string" },
+          "year": { "type": "string" },
+          "engine": { "type": "string" },
+          "vin": { "type": "string" },
+          "configuration": { "type": "string" }
+        }
+      },
+      "candidate_checks": {
+        "type": "array",
+        "description": "候选检查项列表；operation 为 rank_checks 时必填，由 retrieve_checks 拉取得到",
+        "items": {
+          "type": "object",
+          "required": ["check_id", "check_name", "check_source"],
+          "properties": {
+            "check_id": { "type": "string" },
+            "check_name": { "type": "string" },
+            "check_source": {
+              "type": "string",
+              "enum": ["structured_repair_knowledge", "llm_generated"]
+            },
+            "linked_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "linked_causes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "cause_id": { "type": "string" },
+                  "cause_name": { "type": "string" },
+                  "cause_priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"]
+                  },
+                  "supported_dtcs": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "check_type": { "type": "string" },
+            "check_goal": { "type": "string" },
+            "structured_order": { "type": "integer" },
+            "prerequisite_check_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "judgment_summary": { "type": "string" },
+            "result_branches": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/result_branch" }
+            },
+            "check_cost": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            },
+            "required_tools": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "source_confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "warning_note": { "type": "string" },
+            "uncertainty_note": { "type": "string" }
+          }
+        }
+      },
+      "inspection_results": {
+        "type": "array",
+        "description": "已有检查结果，用于避免重复推荐或调整检查项顺序",
+        "items": {
+          "type": "object",
+          "required": ["check_id", "result_type"],
+          "properties": {
+            "check_id": { "type": "string" },
+            "result_type": {
+              "type": "string",
+              "enum": ["normal", "abnormal", "inconclusive"]
+            },
+            "result_detail": { "type": "string" },
+            "note": { "type": "string" }
+          }
+        }
+      }
+    },
+    "$defs": {
+      "affected_cause": {
+        "type": "object",
+        "properties": {
+          "cause_id": { "type": "string" },
+          "cause_name": { "type": "string" }
+        }
+      },
+      "result_branch": {
+        "type": "object",
+        "required": ["result_type", "result_interpretation", "next_action"],
+        "properties": {
+          "result_type": {
+            "type": "string",
+            "enum": ["normal", "abnormal", "inconclusive"]
+          },
+          "judgment_condition": { "type": "string" },
+          "result_interpretation": { "type": "string" },
+          "affected_causes": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/affected_cause" }
+          },
+          "next_action": {
+            "type": "string",
+            "enum": [
+              "continue_check",
+              "update_cause_ranking",
+              "enter_repair_planning",
+              "ask_user",
+              "human_support"
+            ]
+          },
+          "next_check_id": { "type": "string" },
+          "confirmed_cause": { "$ref": "#/$defs/affected_cause" },
+          "uncertainty_note": { "type": "string" }
+        }
+      },
+      "ranked_check": {
+        "type": "object",
+        "required": [
+          "check_id",
+          "check_name",
+          "check_source",
+          "check_goal",
+          "priority",
+          "ranking_basis",
+          "source_confidence"
+        ],
+        "properties": {
+          "check_id": { "type": "string" },
+          "check_name": { "type": "string" },
+          "check_source": {
+            "type": "string",
+            "enum": ["structured_repair_knowledge", "llm_generated"]
+          },
+          "linked_dtcs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "linked_causes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cause_id": { "type": "string" },
+                "cause_name": { "type": "string" },
+                "cause_priority": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                },
+                "supported_dtcs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          },
+          "related_parts": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "check_type": { "type": "string" },
+          "check_goal": { "type": "string" },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "check_cost": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "ranking_basis": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "judgment_summary": { "type": "string" },
+          "result_branches": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/result_branch" }
+          },
+          "required_tools": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "warning_note": { "type": "string" },
+          "uncertainty_note": { "type": "string" }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "candidate_checks": {
+        "type": "array",
+        "description": "retrieve_checks 的内部中间结果，不作为对外核心输出",
+        "items": {
+          "type": "object",
+          "required": ["check_id", "check_name", "check_source"],
+          "properties": {
+            "check_id": { "type": "string" },
+            "check_name": { "type": "string" },
+            "check_source": {
+              "type": "string",
+              "enum": ["structured_repair_knowledge", "llm_generated"]
+            },
+            "linked_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "linked_causes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "cause_id": { "type": "string" },
+                  "cause_name": { "type": "string" },
+                  "cause_priority": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"]
+                  },
+                  "supported_dtcs": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "check_type": { "type": "string" },
+            "check_goal": { "type": "string" },
+            "structured_order": { "type": "integer" },
+            "prerequisite_check_ids": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "judgment_summary": { "type": "string" },
+            "result_branches": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["result_type", "result_interpretation", "next_action"],
+                "properties": {
+                  "result_type": {
+                    "type": "string",
+                    "enum": ["normal", "abnormal", "inconclusive"]
+                  },
+                  "judgment_condition": { "type": "string" },
+                  "result_interpretation": { "type": "string" },
+                  "affected_causes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "cause_id": { "type": "string" },
+                        "cause_name": { "type": "string" }
+                      }
+                    }
+                  },
+                  "next_action": {
+                    "type": "string",
+                    "enum": [
+                      "continue_check",
+                      "update_cause_ranking",
+                      "enter_repair_planning",
+                      "ask_user",
+                      "human_support"
+                    ]
+                  },
+                  "next_check_id": { "type": "string" },
+                  "confirmed_cause": {
+                    "type": "object",
+                    "properties": {
+                      "cause_id": { "type": "string" },
+                      "cause_name": { "type": "string" }
+                    }
+                  },
+                  "uncertainty_note": { "type": "string" }
+                }
+              }
+            },
+            "check_cost": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            },
+            "required_tools": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "source_confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "warning_note": { "type": "string" },
+            "uncertainty_note": { "type": "string" }
+          }
+        }
+      },
+      "diagnostic_plan": {
+        "type": ["object", "null"],
+        "description": "本次 Diagnostic Planning 的整体诊断检查计划；信息不足时为 null",
+        "required": ["target_type", "ranked_checks"],
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": ["dtc_group", "single_dtc", "symptom_case"]
+          },
+          "group_id": { "type": "string" },
+          "dtcs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "symptom_description": { "type": "string" },
+          "dtc_result": {
+            "type": "string",
+            "enum": ["unknown", "no_dtc"]
+          },
+          "system": { "type": "string" },
+          "ranked_checks": {
+            "type": "array",
+            "description": "排序后的检查项列表，数组顺序代表推荐检查顺序",
+            "items": {
+              "type": "object",
+              "required": [
+                "check_id",
+                "check_name",
+                "check_source",
+                "check_goal",
+                "priority",
+                "ranking_basis",
+                "source_confidence"
+              ],
+              "properties": {
+                "check_id": { "type": "string" },
+                "check_name": { "type": "string" },
+                "check_source": {
+                  "type": "string",
+                  "enum": ["structured_repair_knowledge", "llm_generated"]
+                },
+                "linked_dtcs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "linked_causes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "cause_id": { "type": "string" },
+                      "cause_name": { "type": "string" },
+                      "cause_priority": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"]
+                      },
+                      "supported_dtcs": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    }
+                  }
+                },
+                "related_parts": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "check_type": { "type": "string" },
+                "check_goal": { "type": "string" },
+                "priority": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                },
+                "check_cost": {
+                  "type": "string",
+                  "enum": ["low", "medium", "high"]
+                },
+                "ranking_basis": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "judgment_summary": { "type": "string" },
+                "result_branches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["result_type", "result_interpretation", "next_action"],
+                    "properties": {
+                      "result_type": {
+                        "type": "string",
+                        "enum": ["normal", "abnormal", "inconclusive"]
+                      },
+                      "judgment_condition": { "type": "string" },
+                      "result_interpretation": { "type": "string" },
+                      "affected_causes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "cause_id": { "type": "string" },
+                            "cause_name": { "type": "string" }
+                          }
+                        }
+                      },
+                      "next_action": {
+                        "type": "string",
+                        "enum": [
+                          "continue_check",
+                          "update_cause_ranking",
+                          "enter_repair_planning",
+                          "ask_user",
+                          "human_support"
+                        ]
+                      },
+                      "next_check_id": { "type": "string" },
+                      "confirmed_cause": {
+                        "type": "object",
+                        "properties": {
+                          "cause_id": { "type": "string" },
+                          "cause_name": { "type": "string" }
+                        }
+                      },
+                      "uncertainty_note": { "type": "string" }
+                    }
+                  }
+                },
+                "required_tools": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "source_confidence": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                },
+                "warning_note": { "type": "string" },
+                "uncertainty_note": { "type": "string" }
+              }
+            }
+          },
+          "uncertainty_note": { "type": "string" }
+        }
+      },
+      "uncertainty_note": { "type": "string" },
+      "missing_required_info": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

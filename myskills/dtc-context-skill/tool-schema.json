@@ -1,0 +1,64 @@
+{
+  "tool_name": "dtc_context_service",
+  "tool_kind": "global_tool_service",
+  "description": "用于将单个 DTC 解析为标准化背景上下文的全局服务。",
+  "input_schema": {
+    "type": "object",
+    "required": ["dtc_code"],
+    "properties": {
+      "dtc_code": {
+        "type": "string",
+        "description": "待解析的 DTC 编码，例如 P0171 或 U0100"
+      },
+      "brand": {
+        "type": "string",
+        "description": "用于品牌语义解析的车辆品牌"
+      },
+      "vehicle_info": {
+        "type": "object",
+        "description": "可选的车辆上下文，例如车型、年款、系统、VIN 或已知配置",
+        "properties": {
+          "model": { "type": "string" },
+          "year": { "type": "string" },
+          "system": { "type": "string" },
+          "vin": { "type": "string" },
+          "configuration": { "type": "string" }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["dtc_context"],
+    "properties": {
+      "dtc_context": {
+        "type": "object",
+        "required": ["dtc_code", "interpretation_type", "source_type", "confidence"],
+        "properties": {
+          "dtc_code": { "type": "string" },
+          "brand": { "type": "string" },
+          "dtc_description": { "type": "string" },
+          "system": { "type": "string" },
+          "subsystem": { "type": "string" },
+          "trigger_condition": { "type": "string" },
+          "related_parts": { "type": "array", "items": { "type": "string" } },
+          "related_datastreams": { "type": "array", "items": { "type": "string" } },
+          "interpretation_type": {
+            "type": "string",
+            "enum": ["generic_obd", "brand_specific", "uncertain"]
+          },
+          "source_type": {
+            "type": "string",
+            "enum": ["generic_obd_database", "brand_dtc_data", "dtc_database", "llm_generated"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "uncertainty_note": { "type": "string" },
+          "missing_required_info": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

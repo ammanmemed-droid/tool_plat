@@ -1,0 +1,275 @@
+{
+  "tool_name": "cause_ranking_service",
+  "tool_kind": "global_tool_service",
+  "description": "针对当前分析对象（DTC Group、single DTC 或 symptom_case）拉取并排序候选原因的全局服务。",
+  "input_schema": {
+    "type": "object",
+    "required": ["operation", "target_type"],
+    "properties": {
+      "operation": {
+        "type": "string",
+        "enum": ["retrieve_causes", "rank_causes"],
+        "description": "内部执行指令：retrieve_causes 拉取候选原因，rank_causes 排序候选原因"
+      },
+      "target_type": {
+        "type": "string",
+        "enum": ["dtc_group", "single_dtc", "symptom_case"],
+        "description": "当前分析对象类型"
+      },
+      "group_id": {
+        "type": "string",
+        "description": "DTC 分组 ID；target_type 为 dtc_group 时必填"
+      },
+      "dtcs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "DTC 列表；target_type 为 dtc_group 或 single_dtc 时必填；symptom_case 时可为空"
+      },
+      "symptom_description": {
+        "type": "string",
+        "description": "故障现象描述；target_type 为 symptom_case 时必填；DTC 场景下可作为可选增强信息"
+      },
+      "dtc_result": {
+        "type": "string",
+        "enum": ["unknown", "no_dtc"],
+        "description": "DTC 结果状态；target_type 为 symptom_case 时必填"
+      },
+      "brand": {
+        "type": "string",
+        "description": "车辆品牌，用于限定品牌语义、原因数据匹配口径和维修资料范围"
+      },
+      "system": {
+        "type": "string",
+        "description": "所属系统；DTC 场景通常必备，symptom_case 下无法确定时可为空"
+      },
+      "related_parts": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "当前分析对象涉及的相关零件或部件"
+      },
+      "vehicle_info": {
+        "type": "object",
+        "description": "可选车辆上下文，用于提高原因匹配准确性",
+        "properties": {
+          "model": { "type": "string" },
+          "year": { "type": "string" },
+          "engine": { "type": "string" },
+          "vin": { "type": "string" },
+          "configuration": { "type": "string" }
+        }
+      },
+      "candidate_causes": {
+        "type": "array",
+        "description": "候选原因列表；operation 为 rank_causes 时必填，由 retrieve_causes 拉取得到",
+        "items": {
+          "type": "object",
+          "required": ["cause_name", "cause_source"],
+          "properties": {
+            "cause_id": { "type": "string" },
+            "temporary_cause_id": { "type": "string" },
+            "cause_name": { "type": "string" },
+            "cause_source": {
+              "type": "string",
+              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
+            },
+            "source_reference": { "type": "string" },
+            "supported_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "datastreams": {
+        "type": "array",
+        "description": "实测数据流或诊断数据，用于判断候选原因与车辆状态是否一致",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "value": { "type": "string" },
+            "unit": { "type": "string" }
+          }
+        }
+      },
+      "freeze_frame": {
+        "type": "object",
+        "description": "故障发生时的车辆状态，用于辅助原因排序"
+      },
+      "inspection_results": {
+        "type": "array",
+        "description": "Diagnostic Planning 或用户反馈的检查结果",
+        "items": {
+          "type": "object",
+          "properties": {
+            "item": { "type": "string" },
+            "result": { "type": "string" },
+            "note": { "type": "string" }
+          }
+        }
+      },
+      "repair_feedback": {
+        "type": "array",
+        "description": "用户已执行维修及维修后结果",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string" },
+            "part": { "type": "string" },
+            "outcome": { "type": "string" }
+          }
+        }
+      },
+      "recurrence_result": {
+        "type": "object",
+        "description": "清码、路试、复扫后的故障复现情况",
+        "properties": {
+          "cleared": { "type": "boolean" },
+          "recurred": { "type": "boolean" },
+          "note": { "type": "string" }
+        }
+      },
+      "ranked_causes": {
+        "type": "array",
+        "description": "上一轮排序结果；有新增证据时作为排序更新基础",
+        "items": {
+          "type": "object",
+          "required": ["cause_name", "cause_source", "priority", "confidence", "ranking_basis"],
+          "properties": {
+            "cause_id": { "type": "string" },
+            "temporary_cause_id": { "type": "string" },
+            "cause_name": { "type": "string" },
+            "cause_source": {
+              "type": "string",
+              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
+            },
+            "source_reference": { "type": "string" },
+            "supported_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "priority": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "ranking_basis": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "uncertainty_note": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "candidate_causes": {
+        "type": "array",
+        "description": "retrieve_causes 的内部中间结果，不作为 Diagnostic Planning 的正式输入",
+        "items": {
+          "type": "object",
+          "required": ["cause_name", "cause_source"],
+          "properties": {
+            "cause_id": { "type": "string" },
+            "temporary_cause_id": { "type": "string" },
+            "cause_name": { "type": "string" },
+            "cause_source": {
+              "type": "string",
+              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
+            },
+            "source_reference": { "type": "string" },
+            "supported_dtcs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "related_parts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "uncertainty_note": { "type": "string" }
+          }
+        }
+      },
+      "ranking_result": {
+        "type": ["object", "null"],
+        "description": "本次 Cause Ranking 的整体排序结果；信息不足时为 null",
+        "required": ["target_type", "ranked_causes"],
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": ["dtc_group", "single_dtc", "symptom_case"]
+          },
+          "group_id": { "type": "string" },
+          "dtc_result": {
+            "type": "string",
+            "enum": ["unknown", "no_dtc"]
+          },
+          "dtcs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "symptom_description": { "type": "string" },
+          "system": { "type": "string" },
+          "ranked_causes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["cause_name", "cause_source", "priority", "confidence", "ranking_basis"],
+              "properties": {
+                "cause_id": { "type": "string" },
+                "temporary_cause_id": { "type": "string" },
+                "cause_name": { "type": "string" },
+                "cause_source": {
+                  "type": "string",
+                  "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
+                },
+                "source_reference": { "type": "string" },
+                "supported_dtcs": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "related_parts": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": ["high", "medium", "low"]
+                },
+                "ranking_basis": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "uncertainty_note": { "type": "string" }
+              }
+            }
+          },
+          "uncertainty_note": { "type": "string" }
+        }
+      },
+      "uncertainty_note": { "type": "string" },
+      "missing_required_info": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

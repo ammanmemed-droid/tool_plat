@@ -1,0 +1,127 @@
+{
+  "request_id": "0ed6ac74c8574194",
+  "groups": [
+    {
+      "group_id": "d96c74dc938d",
+      "group_name": "A/F 传感器（传感器 1）相关故障组",
+      "dtc_level": null,
+      "representative_dtc": "P0171",
+      "dtc_codes": [
+        "P0171"
+      ],
+      "record_ids": [
+        325,
+        326,
+        327,
+        328
+      ],
+      "group_names": [],
+      "involved_parts": [
+        "A/F 传感器（传感器 1）",
+        "A/F传感器",
+        "MAF(质量空气流量传感器)"
+      ],
+      "group_reason": "standalone",
+      "causes": [
+        {
+          "cause_id": "cause_37062c8db2af",
+          "cause_name": "MAF(质量空气流量传感器)故障",
+          "dtc_codes": [
+            "P0171"
+          ],
+          "record_ids": [
+            325,
+            326
+          ],
+          "inspection": {
+            "check_item": "检查项1：检查MAF(质量空气流量传感器)——检查MAF传感器连接与功能，清洁或更换传感器。",
+            "judgment_basis": "MAF传感器信号异常，导致空燃比过稀，触发P0171。",
+            "operation_tip": "检查MAF传感器连接是否牢固，清洁传感器，必要时更换。"
+          },
+          "repair": {
+            "steps": "方案1：检查MAF传感器连接与功能，清洁或更换传感器。",
+            "note": "请按原厂维修手册规范执行，完成后检查安装状态并复检故障码。"
+          },
+          "parts_and_tools": {
+            "reference_price": 1764.0,
+            "required_tools": null,
+            "labor_hours": 1.5
+          },
+          "verification": {
+            "items": [
+              {
+                "order": 1,
+                "check_item": "检查MAF传感器连接器是否松动或腐蚀",
+                "expected_result": "连接器紧固，无腐蚀"
+              },
+              {
+                "order": 2,
+                "check_item": "检查MAF传感器是否脏污",
+                "expected_result": "传感器清洁，无积垢"
+              },
+              {
+                "order": 3,
+                "check_item": "检查MAF传感器信号是否在正常范围",
+                "expected_result": "信号值符合标准"
+              }
+            ],
+            "generated_by": "llm"
+          }
+        },
+        {
+          "cause_id": "cause_8e3fc7b19905",
+          "cause_name": "A/F 传感器（传感器 1）故障",
+          "dtc_codes": [
+            "P0171"
+          ],
+          "record_ids": [
+            327,
+            328
+          ],
+          "inspection": {
+            "check_item": "检查项2：检查A/F传感器——检查并更换A/F 传感器（传感器 1）",
+            "judgment_basis": "A/F传感器（传感器1）信号异常，导致空燃比反馈错误，触发P0171。",
+            "operation_tip": "检查A/F传感器连接和功能，必要时更换传感器。"
+          },
+          "repair": {
+            "steps": "方案2：检查并更换A/F 传感器（传感器 1）",
+            "note": "请按原厂维修手册规范执行，完成后检查安装状态并复检故障码。"
+          },
+          "parts_and_tools": {
+            "reference_price": 1116.0,
+            "required_tools": null,
+            "labor_hours": 1.5
+          },
+          "verification": {
+            "items": [
+              {
+                "order": 1,
+                "check_item": "检查A/F传感器连接器是否松动或腐蚀",
+                "expected_result": "连接器紧固，无腐蚀"
+              },
+              {
+                "order": 2,
+                "check_item": "检查A/F传感器信号是否在正常范围",
+                "expected_result": "信号值符合标准"
+              },
+              {
+                "order": 3,
+                "check_item": "检查A/F传感器加热器电路是否正常",
+                "expected_result": "加热器工作正常"
+              }
+            ],
+            "generated_by": "llm"
+          }
+        }
+      ],
+      "uncertainty_note": null
+    }
+  ],
+  "unmatched_dtcs": [
+    "P0300"
+  ],
+  "elapsed_ms": 3335,
+  "llm_degraded": false,
+  "uncertainty_note": "请求未提供品牌和车型，知识记录仅保证 DTC 精确命中；品牌/车型适用性需结合目标车辆原厂资料复核；1 个 DTC 未在本地维修知识库中命中。",
+  "missing_required_info": null
+}

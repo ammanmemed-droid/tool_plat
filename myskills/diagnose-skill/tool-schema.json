@@ -1,0 +1,691 @@
+{
+  "tool_name": "diagnose_service",
+  "tool_kind": "global_tool_service",
+  "endpoint_name": "diagnoses",
+  "contract_kind": "rest_api_endpoint",
+  "method": "POST",
+  "path": "/api/v1/diagnoses",
+  "available_as_global_tool": true,
+  "description": "DTC 综合诊断检索全局服务（远程代理 roxie-rag-service POST /api/v1/diagnoses）：LLM 槽位提取 + 多路召回 + RRF 融合 + DTC 分组 + 规则排序与可选 Cross-Encoder 精排。",
+  "input_schema": {
+    "$defs": {
+      "VehicleInfo": {
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4,
+                "pattern": "^\\d{4}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类；提供 DTC 码时必须与首字母一致"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "一级分类下的二级系统名"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Dtc Codes"
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vin"
+          }
+        },
+        "type": "object",
+        "title": "VehicleInfo",
+        "description": "设备带入的结构化车辆上下文(优先级最高)。"
+      }
+    },
+    "properties": {
+      "query": {
+        "type": "string",
+        "maxLength": 500,
+        "title": "Query",
+        "description": "自然语言故障描述"
+      },
+      "vehicle_info": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/VehicleInfo"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "top_n": {
+        "type": "integer",
+        "maximum": 20.0,
+        "minimum": 1.0,
+        "title": "Top N",
+        "description": "每组返回 Top-N 候选原因",
+        "default": 5
+      },
+      "enable_reranker": {
+        "type": "boolean",
+        "title": "Enable Reranker",
+        "description": "是否启用 Cross-Encoder 精排",
+        "default": true
+      }
+    },
+    "type": "object",
+    "required": [
+      "query"
+    ],
+    "title": "DiagnoseRequest",
+    "description": "POST /api/v1/diagnoses 请求体。",
+    "examples": [
+      {
+        "enable_reranker": true,
+        "query": "福特蒙迪欧2016款报P2089加速无力",
+        "top_n": 5,
+        "vehicle_info": {
+          "brand": "福特",
+          "dtc_codes": [
+            "P2089"
+          ],
+          "model": "蒙迪欧",
+          "year": "2016"
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "$defs": {
+      "ContextOut": {
+        "properties": {
+          "raw_query": {
+            "type": "string",
+            "title": "Raw Query",
+            "description": "原始 query"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "规范化后的故障码(大写、标准位)"
+          },
+          "raw_dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Raw Dtc Codes",
+            "description": "原文故障码(可能含异常格式,如 P042000)"
+          },
+          "dtc_categories": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "动力系统",
+                "底盘系统",
+                "车身系统",
+                "网络通讯系统"
+              ]
+            },
+            "type": "array",
+            "title": "Dtc Categories",
+            "description": "查询涉及的 PCBU 一级分类（优先由 DTC 码派生；无 DTC 时可来自 vehicle_info）"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand",
+            "description": "品牌槽位"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "车型槽位"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "年款槽位"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "二级系统名槽位，不用于反推 PCBU 一级分类"
+          },
+          "symptom_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symptom Keywords",
+            "description": "现象关键词"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "vehicle_info",
+              "llm_supplemented",
+              "rule",
+              "mixed"
+            ],
+            "title": "Source",
+            "description": "槽位来源:vehicle_info=设备带入 / rule=纯规则 / llm_supplemented=LLM 补缺 / mixed=混合"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "来源置信度 0–1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw_query",
+          "dtc_codes",
+          "raw_dtc_codes",
+          "symptom_keywords",
+          "source",
+          "confidence"
+        ],
+        "title": "ContextOut",
+        "description": "F1 槽位提取结果(检索约束的落地值)。"
+      },
+      "GroupOut": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id",
+            "description": "组 ID(成员 record_ids 哈希)"
+          },
+          "representative_dtc": {
+            "type": "string",
+            "title": "Representative Dtc",
+            "description": "组内代表故障码(频次最高)"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "组内全部故障码"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids",
+            "description": "组内知识库记录 ID"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System",
+            "description": "组内共同二级系统名；跨系统聚类时为 null"
+          },
+          "group_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Group Names",
+            "description": "组名来源：组内各逻辑 DTC 共享的规范化零部件"
+          },
+          "group_reason": {
+            "type": "string",
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "standalone"
+            ],
+            "title": "Group Reason",
+            "description": "分组依据:same_code=同故障码 / same_system_shared_parts=同二级系统且零件有交集 / shared_parts=跨二级系统但规范化零件有交集 / standalone=独立成组"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "description": "组内记录数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "representative_dtc",
+          "dtc_codes",
+          "record_ids",
+          "group_names",
+          "group_reason",
+          "member_count"
+        ],
+        "title": "GroupOut",
+        "description": "DTC 分组元数据。"
+      },
+      "GroupResultOut": {
+        "properties": {
+          "group": {
+            "$ref": "#/$defs/GroupOut"
+          },
+          "ranked_causes": {
+            "items": {
+              "$ref": "#/$defs/RankedCauseOut"
+            },
+            "type": "array",
+            "title": "Ranked Causes"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "ranked_causes",
+          "truncated"
+        ],
+        "title": "GroupResultOut",
+        "description": "一个 DTC 组的排序结果。"
+      },
+      "RankedCauseOut": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank",
+            "description": "名次(1 起)"
+          },
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id",
+            "description": "知识库记录 ID(可回查详情)"
+          },
+          "dtc_code": {
+            "type": "string",
+            "title": "Dtc Code",
+            "description": "故障码"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Category",
+            "description": "PCBU 一级分类"
+          },
+          "possible_cause": {
+            "type": "string",
+            "title": "Possible Cause",
+            "description": "可能原因"
+          },
+          "recommended_check": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Check",
+            "description": "检查项"
+          },
+          "repair_solution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Solution",
+            "description": "维修方案"
+          },
+          "repair_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repair Method",
+            "description": "维修方法"
+          },
+          "parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parts",
+            "description": "零件列表"
+          },
+          "labor_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Hours",
+            "description": "工时(小时)"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price",
+            "description": "价格(元)"
+          },
+          "oem_doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc",
+            "description": "OEM 维修手册名"
+          },
+          "oem_doc_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oem Doc Url",
+            "description": "OEM 手册链接"
+          },
+          "final_score": {
+            "type": "number",
+            "title": "Final Score",
+            "description": "最终综合分(降序,越大越相关;降级时等于 rule_score)"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score",
+            "description": "Reranker 语义相关分 [0,1];降级时为 null"
+          },
+          "rule_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Score",
+            "description": "规则分(字段命中 + 文本重叠)"
+          },
+          "score_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "reranker",
+                  "rule_fallback"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Source",
+            "description": "分数来源:reranker=真实精排分 / rule_fallback=降级纯规则分"
+          },
+          "score_breakdown": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Breakdown",
+            "description": "规则分明细(b1_field 字段命中 / b2_jaccard 文本重叠 / jaccard)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "record_id",
+          "dtc_code",
+          "possible_cause",
+          "parts",
+          "final_score"
+        ],
+        "title": "RankedCauseOut",
+        "description": "单条候选原因(已序列化为 JSON 安全类型)。"
+      }
+    },
+    "properties": {
+      "request_id": {
+        "type": "string",
+        "title": "Request Id"
+      },
+      "context": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ContextOut"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "groups": {
+        "items": {
+          "$ref": "#/$defs/GroupOut"
+        },
+        "type": "array",
+        "title": "Groups"
+      },
+      "results": {
+        "items": {
+          "$ref": "#/$defs/GroupResultOut"
+        },
+        "type": "array",
+        "title": "Results"
+      },
+      "elapsed_ms": {
+        "type": "integer",
+        "title": "Elapsed Ms"
+      },
+      "reranker_degraded": {
+        "type": "boolean",
+        "title": "Reranker Degraded",
+        "description": "Reranker 是否降级；true 表示仅使用规则分排序",
+        "default": false
+      },
+      "uncertainty_note": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Uncertainty Note",
+        "description": "结果不完整时的说明"
+      },
+      "missing_required_info": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Missing Required Info",
+        "description": "请求中缺失的必需字段路径"
+      }
+    },
+    "type": "object",
+    "required": [
+      "request_id",
+      "groups",
+      "results",
+      "elapsed_ms"
+    ],
+    "title": "DiagnoseResponse",
+    "description": "POST /api/v1/diagnoses 响应体。"
+  }
+}

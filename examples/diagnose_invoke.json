@@ -1,0 +1,13 @@
+{
+  "arguments": {
+    "query": "福特蒙迪欧2016款报P2089加速无力",
+    "vehicle_info": {
+      "brand": "福特",
+      "model": "蒙迪欧",
+      "year": "2016",
+      "dtc_codes": ["P2089"]
+    },
+    "top_n": 3,
+    "enable_reranker": true
+  }
+}

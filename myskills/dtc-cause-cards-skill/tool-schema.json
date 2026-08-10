@@ -1,0 +1,458 @@
+{
+  "tool_name": "dtc_cause_cards_service",
+  "tool_kind": "global_tool_service",
+  "endpoint_name": "dtc-cause-cards",
+  "contract_kind": "rest_api_endpoint",
+  "method": "POST",
+  "path": "/api/v1/dtc-cause-cards",
+  "available_as_global_tool": true,
+  "description": "DTC 原因处置卡片聚合全局服务（远程代理 roxie-rag-service POST /api/v1/dtc-cause-cards）：输入品牌、车型与未分组 DTC 列表，按 PCBU 硬边界和规范零部件交集分组，输出去重原因及检查/维修/验证信息；支持 strict / same_brand_fallback 车辆匹配策略。",
+  "input_schema": {
+    "properties": {
+      "brand": {
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Brand",
+        "description": "目标车辆品牌"
+      },
+      "model": {
+        "type": "string",
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Model",
+        "description": "目标车型"
+      },
+      "vehicle_match_policy": {
+        "type": "string",
+        "enum": [
+          "strict",
+          "same_brand_fallback"
+        ],
+        "title": "Vehicle Match Policy",
+        "description": "strict=仅品牌+车型；same_brand_fallback=无车型数据时显式降级到同品牌其他车型",
+        "default": "strict"
+      },
+      "dtc_codes": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "maxItems": 50,
+        "minItems": 1,
+        "title": "Dtc Codes",
+        "description": "未分组 DTC 列表，1–50 个"
+      }
+    },
+    "type": "object",
+    "required": [
+      "brand",
+      "model",
+      "dtc_codes"
+    ],
+    "title": "CauseCardsRequest",
+    "description": "指定车辆下待自动检索、分组和聚合的 DTC 列表。"
+  },
+  "output_schema": {
+    "$defs": {
+      "CauseGroupOut": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "group_name": {
+            "type": "string",
+            "title": "Group Name"
+          },
+          "dtc_level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtc Level",
+            "description": "组内最严重的有效故障等级：1 最严重、4 最不严重；-1 和无效值忽略"
+          },
+          "vehicle_match_level": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "same_brand_fallback"
+            ],
+            "title": "Vehicle Match Level",
+            "description": "组内知识的车辆匹配级别；存在任一降级 DTC 时为 same_brand_fallback"
+          },
+          "fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fallback Dtcs",
+            "description": "本组使用同品牌其他车型知识的 DTC；strict 组为空"
+          },
+          "representative_dtc": {
+            "type": "string",
+            "title": "Representative Dtc"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids"
+          },
+          "group_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Group Names",
+            "description": "形成分组关系的共享规范零部件（交集）"
+          },
+          "involved_parts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Involved Parts",
+            "description": "组内全部知识记录相关零部件的规范化并集"
+          },
+          "group_reason": {
+            "type": "string",
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "semantic_family",
+              "standalone"
+            ],
+            "title": "Group Reason"
+          },
+          "causes": {
+            "items": {
+              "$ref": "#/$defs/CauseCardOut"
+            },
+            "type": "array",
+            "title": "Causes"
+          },
+          "uncertainty_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "group_name",
+          "vehicle_match_level",
+          "representative_dtc",
+          "dtc_codes",
+          "record_ids",
+          "group_names",
+          "involved_parts",
+          "group_reason",
+          "causes"
+        ],
+        "title": "CauseGroupOut"
+      },
+      "CauseCardOut": {
+        "properties": {
+          "cause_id": {
+            "type": "string",
+            "title": "Cause Id"
+          },
+          "cause_name": {
+            "type": "string",
+            "title": "Cause Name"
+          },
+          "probability": {
+            "type": "string",
+            "title": "Probability",
+            "description": "该原因在所属故障组内的可能性百分比（如 \"50%\"）；同组各原因之和恒为 100%"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dtc Codes",
+            "description": "支持该原因的组内 DTC"
+          },
+          "record_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Record Ids",
+            "description": "合并后的知识记录 ID，便于问题回查"
+          },
+          "inspection": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InspectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repair": {
+            "$ref": "#/$defs/RepairOut"
+          },
+          "parts_and_tools": {
+            "$ref": "#/$defs/PartsAndToolsOut"
+          },
+          "verification": {
+            "$ref": "#/$defs/VerificationOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cause_id",
+          "cause_name",
+          "probability",
+          "dtc_codes",
+          "record_ids",
+          "repair",
+          "parts_and_tools",
+          "verification"
+        ],
+        "title": "CauseCardOut"
+      },
+      "InspectionOut": {
+        "properties": {
+          "check_item": {
+            "type": "string",
+            "title": "Check Item"
+          },
+          "judgment_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgment Basis"
+          },
+          "operation_tip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Tip"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_item"
+        ],
+        "title": "InspectionOut"
+      },
+      "RepairOut": {
+        "properties": {
+          "steps": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps",
+            "description": "知识库维修指引原文；多个不重复指引按来源顺序换行拼接，不拆分编号步骤"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "title": "RepairOut"
+      },
+      "PartsAndToolsOut": {
+        "properties": {
+          "reference_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Price"
+          },
+          "required_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tools"
+          },
+          "labor_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labor Hours"
+          }
+        },
+        "type": "object",
+        "title": "PartsAndToolsOut"
+      },
+      "VerificationOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/VerificationItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "generated_by": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "template_fallback"
+            ],
+            "title": "Generated By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "generated_by"
+        ],
+        "title": "VerificationOut"
+      },
+      "VerificationItemOut": {
+        "properties": {
+          "order": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order"
+          },
+          "check_item": {
+            "type": "string",
+            "title": "Check Item"
+          },
+          "expected_result": {
+            "type": "string",
+            "title": "Expected Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order",
+          "check_item",
+          "expected_result"
+        ],
+        "title": "VerificationItemOut"
+      }
+    },
+    "properties": {
+      "request_id": {
+        "type": "string",
+        "title": "Request Id"
+      },
+      "groups": {
+        "items": {
+          "$ref": "#/$defs/CauseGroupOut"
+        },
+        "type": "array",
+        "title": "Groups"
+      },
+      "unmatched_dtcs": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "title": "Unmatched Dtcs"
+      },
+      "elapsed_ms": {
+        "type": "integer",
+        "title": "Elapsed Ms"
+      },
+      "llm_degraded": {
+        "type": "boolean",
+        "title": "Llm Degraded",
+        "description": "true 表示 LLM 被禁用、不可达或输出无效，维修后验证已使用模板降级",
+        "default": false
+      },
+      "uncertainty_note": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Uncertainty Note"
+      },
+      "missing_required_info": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Missing Required Info"
+      }
+    },
+    "type": "object",
+    "required": [
+      "request_id",
+      "groups",
+      "unmatched_dtcs",
+      "elapsed_ms"
+    ],
+    "title": "CauseCardsResponse"
+  }
+}

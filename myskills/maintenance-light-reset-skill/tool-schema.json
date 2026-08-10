@@ -1,0 +1,169 @@
+{
+  "tool_name": "maintenance_light_reset_service",
+  "tool_kind": "global_tool_service",
+  "description": "基于品牌、车型、年款匹配保养归零资料并输出 SOP，或在设备支持且用户确认后执行保养灯归零的全局服务。",
+  "input_schema": {
+    "type": "object",
+    "required": ["brand", "model", "year"],
+    "properties": {
+      "brand": {
+        "type": "string",
+        "description": "车辆品牌，用于匹配品牌资料或执行能力"
+      },
+      "model": {
+        "type": "string",
+        "description": "车型，用于匹配具体车型步骤或设备能力"
+      },
+      "year": {
+        "type": "string",
+        "description": "年款，用于匹配适用年款和操作资料"
+      },
+      "action_mode": {
+        "type": "string",
+        "enum": ["guide", "execute"],
+        "default": "guide",
+        "description": "操作模式：guide 输出 SOP 指引，execute 授权执行保养归零"
+      },
+      "vin": {
+        "type": "string",
+        "description": "VIN，用于辅助确认车型、年款和配置"
+      },
+      "device_model": {
+        "type": "string",
+        "description": "元征设备型号，用于辅助判断界面、功能入口或执行能力差异"
+      },
+      "software_version": {
+        "type": "string",
+        "description": "软件版本，用于辅助判断功能入口和资料适配性"
+      },
+      "device_connection_status": {
+        "type": "string",
+        "enum": ["connected", "disconnected", "unknown"],
+        "description": "设备连接状态；action_mode 为 execute 时必填"
+      },
+      "device_capability": {
+        "type": "object",
+        "description": "设备能力信息；action_mode 为 execute 时用于判断当前设备是否支持执行",
+        "properties": {
+          "supports_maintenance_reset": {
+            "type": "boolean",
+            "description": "当前设备是否支持保养灯归零"
+          },
+          "supported_vehicle": {
+            "type": "boolean",
+            "description": "当前设备是否支持该车型保养归零"
+          },
+          "capability_note": {
+            "type": "string",
+            "description": "设备能力补充说明"
+          }
+        }
+      },
+      "user_confirmation": {
+        "type": "boolean",
+        "description": "用户是否已明确确认执行；action_mode 为 execute 且实际执行前必填"
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["action_mode"],
+    "properties": {
+      "action_mode": {
+        "type": "string",
+        "enum": ["guide", "execute"],
+        "description": "本次操作模式"
+      },
+      "maintenance_reset_guide": {
+        "type": "object",
+        "description": "guide 模式下的保养归零指引",
+        "required": ["applicable_vehicle", "source_type", "source_confidence", "steps"],
+        "properties": {
+          "applicable_vehicle": {
+            "type": "object",
+            "required": ["brand", "model", "year"],
+            "properties": {
+              "brand": { "type": "string" },
+              "model": { "type": "string" },
+              "year": { "type": "string" }
+            },
+            "description": "适用车型：品牌、车型、年款"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": ["exact_case", "similar_case", "official_manual", "general_path", "llm_generated"],
+            "description": "资料来源类型"
+          },
+          "source_confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "当前 SOP 资料来源的可信程度"
+          },
+          "steps": {
+            "type": "array",
+            "description": "按资料输出的 SOP 步骤",
+            "items": {
+              "type": "object",
+              "required": ["step_no", "instruction"],
+              "properties": {
+                "step_no": {
+                  "type": "integer",
+                  "description": "当前步骤序号"
+                },
+                "instruction": {
+                  "type": "string",
+                  "description": "操作入口、操作动作、界面提示、注意事项或结果提示"
+                },
+                "source_ref": {
+                  "type": "string",
+                  "description": "图示、视频片段、资料段落或案例截图引用"
+                }
+              }
+            }
+          },
+          "uncertainty_note": {
+            "type": "string",
+            "description": "未命中精确案例、设备版本差异、图片缺失等说明"
+          }
+        }
+      },
+      "execution_result": {
+        "type": "object",
+        "description": "execute 模式下的设备执行结果",
+        "required": ["execution_status"],
+        "properties": {
+          "execution_status": {
+            "type": "string",
+            "enum": ["awaiting_confirmation", "success", "failed", "cancelled", "not_supported"],
+            "description": "执行状态"
+          },
+          "executed_action": {
+            "type": "string",
+            "description": "执行动作，例如“保养灯归零”"
+          },
+          "device_message": {
+            "type": "string",
+            "description": "设备返回的执行提示、错误信息或状态说明"
+          },
+          "confirmation_prompt": {
+            "type": "string",
+            "description": "等待用户确认时的提示文案"
+          },
+          "uncertainty_note": {
+            "type": "string",
+            "description": "设备不支持、执行失败或状态不明确时的说明"
+          }
+        }
+      },
+      "uncertainty_note": {
+        "type": "string",
+        "description": "资料不确定、设备不支持、执行失败等情况的不确定性说明"
+      },
+      "missing_required_info": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "缺少品牌、车型、年款或 execute 模式执行必要条件时输出"
+      }
+    }
+  }
+}
