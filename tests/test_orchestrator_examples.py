@@ -28,4 +28,11 @@ def test_orchestrator_example_satisfies_published_tool_contract(
     )
 
     assert contract["tool_name"] == tool_name
+    assert request["request_id"] == f"orchestration-{tool_name}-001"
+    assert request["session_id"] == "repair-session-001"
+    assert request["tenant_id"] == "tenant-demo"
+    assert request["task_id"] == 1001
+    assert not {"request_id", "session_id", "tenant_id", "task_id"} & set(
+        request["arguments"]
+    )
     assert validate_against_schema(request["arguments"], contract["input_schema"]) is None

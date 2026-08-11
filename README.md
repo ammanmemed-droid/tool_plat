@@ -41,6 +41,8 @@ roxie-supper-rag-service（Nacos 发现，全部远程工具）
 | `maintenance_light_reset_service` | 本地实现 | 保养归零 SOP 指引（guide）与授权执行（execute） |
 
 远程代理工作机制：
+- **Agent ID 回显**：所有 Tool invoke 请求只识别顶层 `id` / `*_id` 字符串或整数，
+  从工具参数中分离并在成功、错误响应的 `echo` 中原样返回；没有 ID 时返回 `echo: {}`；
 - **五工具 0.7.0 公共输入**：Context / Grouping / Cause / Diagnostic / Repair 均使用
   `brand + model + dtc_codes`，可选 `year + language`；中台可从编排层快照提取这些字段，
   仅把白名单字段发送给 RAG；
@@ -81,7 +83,7 @@ curl http://localhost:8000/api/v1/tools/dtc_context_service
 # 调用工具
 curl -X POST http://localhost:8000/api/v1/tools/dtc_context_service/invoke \
   -H "Content-Type: application/json" \
-  -d '{"arguments": {"brand": "丰田", "model": "汉兰达", "year": 2021, "dtc_codes": ["P0136", "P0137"], "language": "en"}}'
+  -d '{"request_id": "req-001", "session_id": "session-001", "arguments": {"brand": "丰田", "model": "汉兰达", "year": 2021, "dtc_codes": ["P0136", "P0137"], "language": "en"}}'
 ```
 
 编排层五工具完整示例见 `examples/orchestrator/`。
@@ -111,4 +113,4 @@ uv run python verify_diagnose.py    # diagnose_service
   （幂等 upsert），临时实例被服务端摘除后可自动恢复上线。
 - **Agent 发现**：Agent 经 Nacos 拿到中台地址后，用 `/api/v1/tools` 系列接口
   完成工具发现、契约获取与统一调用；响应统一为
-  `{code, message, data, trace_id}` 信封。
+  `{code, message, data, trace_id}` 信封；所有 invoke 响应额外包含 `echo`。

@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.core.responses import ApiResponse
+from app.core.responses import ApiResponse, EchoValue, echo_ctx, is_echo_id_key
 
 
 class HealthData(BaseModel):
@@ -40,6 +40,8 @@ class ToolInvokeRequest(BaseModel):
     model_config = ConfigDict(extra="allow", json_schema_extra={
         "examples": [
             {
+                "request_id": "req-dtc-context-001",
+                "session_id": "repair-session-001",
                 "arguments": {
                     "brand": "丰田",
                     "model": "汉兰达",
@@ -49,6 +51,9 @@ class ToolInvokeRequest(BaseModel):
                 },
             },
             {
+                "request_id": "req-selected-group-001",
+                "session_id": "repair-session-001",
+                "tenant_id": "tenant-demo",
                 "arguments": {
                     "brand": "丰田",
                     "model": "汉兰达",
@@ -58,6 +63,7 @@ class ToolInvokeRequest(BaseModel):
                 },
             },
             {
+                "request_id": "req-flat-001",
                 "brand": "Toyota",
                 "dtc_codes": ["P0420", "P0430"],
                 "model": "Highlander",
@@ -76,17 +82,37 @@ class ToolInvokeRequest(BaseModel):
         """兼容 Agent 直接将工具字段放在请求体顶层、省略 arguments 包裹的写法。"""
         if not isinstance(data, dict):
             return data
+
+        echo_fields: dict[str, Any] = {}
+        for key, value in data.items():
+            if not isinstance(key, str) or not is_echo_id_key(key):
+                continue
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, (str, int))
+            ):
+                raise ValueError(f"顶层 ID 字段 {key} 只接受字符串、整数或 null")
+            echo_fields[key] = value
+
         arguments = data.get("arguments")
         if isinstance(arguments, dict) and arguments:
             return data
-        flat = {key: value for key, value in data.items() if key != "arguments"}
+        flat = {
+            key: value
+            for key, value in data.items()
+            if key != "arguments"
+            and (not isinstance(key, str) or not is_echo_id_key(key))
+        }
         if flat:
-            return {"arguments": flat}
+            return {"arguments": flat, **echo_fields}
         return data
 
 
 class ToolInvokeResponse(ApiResponse):
     data: dict[str, Any] | None = Field(default=None, description="工具执行结果，结构须满足 output_schema")
+    echo: dict[str, EchoValue] = Field(
+        default_factory=lambda: dict(echo_ctx.get()),
+        description="Agent 请求体顶层 id / *_id 字段的原样回显",
+    )
 
 
 class ErrorResponse(ApiResponse):

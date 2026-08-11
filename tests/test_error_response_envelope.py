@@ -7,7 +7,14 @@ from app.main import app
 
 @pytest.mark.parametrize(
     ("business_code", "http_status"),
-    [(50200, 502), (50300, 503), (50400, 504)],
+    [
+        (40000, 400),
+        (40400, 404),
+        (50002, 500),
+        (50200, 502),
+        (50300, 503),
+        (50400, 504),
+    ],
 )
 def test_upstream_error_response_keeps_standard_envelope(
     monkeypatch, business_code: int, http_status: int
@@ -18,7 +25,10 @@ def test_upstream_error_response_keeps_standard_envelope(
     monkeypatch.setattr("app.api.v1.endpoints.tools.tool_registry.invoke", fail)
     response = TestClient(app).post(
         "/api/v1/tools/dtc_grouping_service/invoke",
-        json={"arguments": {"brand": "丰田"}},
+        json={
+            "request_id": "req-error-001",
+            "arguments": {"brand": "丰田"},
+        },
         headers={"X-Trace-ID": "trace-001"},
     )
 
@@ -28,4 +38,5 @@ def test_upstream_error_response_keeps_standard_envelope(
         "message": "RAG unavailable",
         "data": None,
         "trace_id": "trace-001",
+        "echo": {"request_id": "req-error-001"},
     }

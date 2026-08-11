@@ -68,10 +68,17 @@ def _normalize_array(field_name: str, values: list[Any]) -> list[Any]:
 def extract_slots(arguments: dict[str, Any], input_schema: dict[str, Any]) -> dict[str, Any]:
     """把 Agent 大请求投影成当前工具声明的规范字段。"""
     mappings = input_schema.get("x-extract")
+    properties = input_schema.get("properties")
     if not isinstance(mappings, dict):
-        return arguments
+        if not isinstance(properties, dict):
+            return arguments
+        return {
+            field_name: arguments[field_name]
+            for field_name in properties
+            if field_name in arguments
+        }
 
-    properties = input_schema.get("properties", {})
+    properties = properties if isinstance(properties, dict) else {}
     extracted: dict[str, Any] = {}
     for field_name, configured_paths in mappings.items():
         paths = configured_paths if isinstance(configured_paths, list) else [configured_paths]

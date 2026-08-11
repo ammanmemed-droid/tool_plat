@@ -13,6 +13,8 @@ from logging.config import dictConfig
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 
 import app.tools  # noqa: F401 - 导入即完成工具自注册
@@ -24,7 +26,7 @@ from app.core.logging_config import LOGGING_CONFIG, get_app_logger
 from app.core.nacos import NacosRegistrar
 from app.core.openapi import OPENAPI_TAGS, SWAGGER_UI_PARAMETERS
 from app.core.registry import tool_registry
-from app.core.responses import error, trace_id_ctx
+from app.core.responses import echo_ctx, error, extract_echo_ids, trace_id_ctx
 
 dictConfig(LOGGING_CONFIG)
 logger = get_app_logger(__name__)
@@ -68,7 +70,8 @@ app = FastAPI(
         "4. `POST /api/v1/tools/{tool_name}/invoke` — 统一调用\n\n"
         "## 响应格式\n"
         "所有接口统一返回 `{code, message, data, trace_id}` 信封；"
-        "可通过请求头 `X-Trace-Id` 透传链路追踪 ID。\n\n"
+        "工具 invoke 响应额外固定包含 `echo`。可通过请求头 `X-Trace-Id` 透传链路追踪 ID；"
+        "请求体顶层 `id` / `*_id` 标量字段会进入 echo，但不会作为工具参数转发。\n\n"
         "## 已实现工具\n"
         "| tool_name | 说明 |\n"
         "|---|---|\n"
@@ -98,17 +101,39 @@ def root() -> RedirectResponse:
 
 @app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
-    """透传或生成 trace_id，写入响应信封与响应头。"""
+    """管理请求级 trace_id 与 invoke echo，并在请求结束后恢复上下文。"""
     trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex
-    token = trace_id_ctx.set(trace_id)
-    if request.method == "POST" and request.url.path.endswith("/invoke"):
+    trace_token = trace_id_ctx.set(trace_id)
+    echo_token = echo_ctx.set({})
+    is_invoke = _is_invoke_request(request)
+    if is_invoke:
         logger.info("收到工具调用请求: %s", request.url.path)
+        try:
+            payload = await request.json()
+        except (UnicodeDecodeError, ValueError):
+            payload = None
+        request_echo = extract_echo_ids(payload)
+        request.state.invoke_echo = request_echo
+        echo_ctx.set(request_echo)
     try:
         response = await call_next(request)
         response.headers["X-Trace-Id"] = trace_id
         return response
     finally:
-        trace_id_ctx.reset(token)
+        echo_ctx.reset(echo_token)
+        trace_id_ctx.reset(trace_token)
+
+
+def _is_invoke_request(request: Request) -> bool:
+    return request.method == "POST" and request.url.path.endswith("/invoke")
+
+
+def _error_content(request: Request, code: int, message: str) -> dict:
+    content = error(code, message).model_dump()
+    if _is_invoke_request(request):
+        request_echo = getattr(request.state, "invoke_echo", echo_ctx.get())
+        content["echo"] = dict(request_echo)
+    return content
 
 
 @app.exception_handler(ToolPlatformError)
@@ -120,13 +145,31 @@ async def tool_platform_error_handler(request: Request, exc: ToolPlatformError) 
         50300: 503,
         50400: 504,
     }.get(exc.code, 500)
-    return JSONResponse(status_code=status_code, content=error(exc.code, exc.message).model_dump())
+    return JSONResponse(
+        status_code=status_code,
+        content=_error_content(request, exc.code, exc.message),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    if not _is_invoke_request(request):
+        return await request_validation_exception_handler(request, exc)
+    return JSONResponse(
+        status_code=400,
+        content=_error_content(request, 40000, f"请求入参校验失败: {exc}"),
+    )
 
 
 @app.exception_handler(Exception)
 async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("未处理异常: %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content=error(50000, f"服务内部错误: {exc}").model_dump())
+    return JSONResponse(
+        status_code=500,
+        content=_error_content(request, 50000, f"服务内部错误: {exc}"),
+    )
 
 
 app.include_router(api_router)

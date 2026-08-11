@@ -1,4 +1,5 @@
 """Agent 侧工具发现与统一调用端点。"""
+from copy import deepcopy
 from typing import Annotated
 
 from fastapi import APIRouter, Path
@@ -17,6 +18,10 @@ from app.core.responses import success
 logger = get_app_logger(__name__)
 
 router = APIRouter(prefix="/tools", tags=["tools"])
+
+INVOKE_RESPONSES = deepcopy(COMMON_RESPONSES)
+for response_spec in INVOKE_RESPONSES.values():
+    response_spec["content"]["application/json"]["example"]["echo"] = {}
 
 
 @router.get(
@@ -70,11 +75,15 @@ def get_tool(
                             "issues": [],
                         },
                         "trace_id": "a1b2c3d4e5f6",
+                        "echo": {
+                            "request_id": "req-001",
+                            "session_id": "session-001",
+                        },
                     },
                 },
             },
         },
-        **COMMON_RESPONSES,
+        **INVOKE_RESPONSES,
     },
 )
 def invoke_tool(
@@ -85,4 +94,4 @@ def invoke_tool(
     logger.info("invoke_tool: tool_name=%s, arguments=%s", tool_name, request.arguments)
     result = tool_registry.invoke(tool_name, request.arguments)
     logger.info("invoke_tool: tool_name=%s, result=%s", tool_name, result)
-    return success(data=result)
+    return ToolInvokeResponse(data=result)

@@ -29,4 +29,5 @@ def test_rag_business_result_is_wrapped_once_in_standard_envelope(monkeypatch) -
         "message": "success",
         "data": business_result,
         "trace_id": "trace-success-001",
+        "echo": {},
     }

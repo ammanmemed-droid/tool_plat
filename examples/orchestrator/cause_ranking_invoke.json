@@ -1,4 +1,8 @@
 {
+  "request_id": "orchestration-cause_ranking_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
   "arguments": {
     "brand": "丰田",
     "model": "汉兰达",
