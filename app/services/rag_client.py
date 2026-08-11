@@ -13,7 +13,8 @@ import httpx
 
 from app.config import get_settings
 from app.core.discovery import rag_discovery
-from app.core.exceptions import ToolExecutionError
+from app.core.exceptions import ToolExecutionError, ToolPlatformError
+from app.core.responses import trace_id_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -73,15 +74,34 @@ class RagServiceClient:
         for url in urls:
             try:
                 logger.info("转发工具调用: %s -> POST %s", tool_name, url)
-                resp = self._client.post(url, json=arguments, timeout=req_timeout)
+                trace_id = trace_id_ctx.get()
+                headers = {"X-Trace-ID": trace_id} if trace_id else {}
+                resp = self._client.post(url, json=arguments, timeout=req_timeout, headers=headers)
                 resp.raise_for_status()
                 return self._unwrap(tool_name, service, resp.json())
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            except (httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+                raise ToolPlatformError(
+                    f"{service} 调用超时: {exc}",
+                    code=50400,
+                ) from exc
+            except httpx.ConnectError as exc:
                 # 实例不做缓存，下次调用会重新向 Nacos 实时查询，无需剔除标记
                 last_error = f"请求 {url} 失败: {exc}"
                 logger.warning("%s", last_error)
                 continue
             except httpx.HTTPStatusError as exc:
+                upstream_codes = {502: 50200, 503: 50300, 504: 50400}
+                upstream_code = upstream_codes.get(exc.response.status_code)
+                if upstream_code is not None:
+                    try:
+                        body = exc.response.json()
+                    except ValueError:
+                        body = {}
+                    detail = body.get("message") if isinstance(body, dict) else None
+                    raise ToolPlatformError(
+                        detail or f"{service} 返回 HTTP {exc.response.status_code}",
+                        code=upstream_code,
+                    ) from exc
                 raise ToolExecutionError(
                     tool_name,
                     f"{service} 返回 HTTP {exc.response.status_code}: {exc.response.text[:300]}",

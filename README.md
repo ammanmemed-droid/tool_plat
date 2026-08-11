@@ -1,6 +1,6 @@
 # Roxie Tool 中台（roxie-router-service）
 
-基于 FastAPI + Python 3.13 + uv 的工具中台，将 `myskills/` 下 7 个 Skill 声明的
+基于 FastAPI + Python 3.13 + uv 的工具中台，将 `myskills/` 下 8 个 Skill 声明的
 全局工具服务实现并统一暴露给 Agent 发现与调用，同时注册到 Nacos 供 Agent 服务发现。
 
 ## 架构与调用链
@@ -15,9 +15,9 @@ Agent（独立 API 服务）
 Tool 中台（本项目）
    │  启动时导入 app.tools 自注册 handler，
    │  扫描 myskills/*/tool-schema.json 绑定契约（唯一契约来源），
-   │  入参校验 -> 转发 -> null 规范化 -> 出参校验
+   │  槽位提取 -> 入参校验 -> 转发 -> null 规范化 -> 出参校验
    ▼
-roxie-rag-service（Nacos 发现，全部远程工具）
+roxie-supper-rag-service（Nacos 发现，全部远程工具）
     POST /api/v1/tool-services/dtc-context
     POST /api/v1/tool-services/dtc-grouping
     POST /api/v1/tool-services/cause-ranking
@@ -31,25 +31,30 @@ roxie-rag-service（Nacos 发现，全部远程工具）
 
 | tool_name | 实现方式 | 远程端点 / 说明 |
 |---|---|---|
-| `dtc_context_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/tool-services/dtc-context` |
-| `dtc_grouping_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/tool-services/dtc-grouping` |
-| `cause_ranking_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/tool-services/cause-ranking` |
-| `diagnostic_planning_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/tool-services/diagnostic-planning` |
-| `repair_planning_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/tool-services/repair-planning` |
-| `diagnose_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/diagnoses`（综合诊断：LLM 槽位提取 + 多路召回 + 精排） |
-| `dtc_cause_cards_service` | 远程代理 | `roxie-rag-service` → POST `/api/v1/dtc-cause-cards`（DTC 原因处置卡片：按品牌+车型分组 + 去重原因 + 检查/维修/验证，支持 strict / same_brand_fallback 匹配策略） |
+| `dtc_context_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/tool-services/dtc-context` |
+| `dtc_grouping_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/tool-services/dtc-grouping` |
+| `cause_ranking_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/tool-services/cause-ranking` |
+| `diagnostic_planning_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/tool-services/diagnostic-planning` |
+| `repair_planning_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/tool-services/repair-planning` |
+| `diagnose_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/diagnoses`（综合诊断：LLM 槽位提取 + 多路召回 + 精排） |
+| `dtc_cause_cards_service` | 远程代理 | `roxie-supper-rag-service` → POST `/api/v1/dtc-cause-cards`（DTC 原因处置卡片：按品牌+车型分组 + 去重原因 + 检查/维修/验证，支持 strict / same_brand_fallback 匹配策略） |
 | `maintenance_light_reset_service` | 本地实现 | 保养归零 SOP 指引（guide）与授权执行（execute） |
 
 远程代理工作机制：
-- **服务发现**：后台任务每 10s 从 Nacos 拉取 `roxie-rag-service`
-  健康实例并缓存，调用时随机挑选实例
+- **五工具 0.7.0 公共输入**：Context / Grouping / Cause / Diagnostic / Repair 均使用
+  `brand + model + dtc_codes`，可选 `year + language`；中台可从编排层快照提取这些字段，
+  仅把白名单字段发送给 RAG；
+- **服务发现**：每次调用实时从 Nacos 查询 `roxie-supper-rag-service`
+  健康实例并随机挑选，不缓存实例列表
   （配置 `RAG_BASE_URL` 可直连跳过发现，用于联调/应急）；
 - **响应兼容**：支持远端裸结果或 `{code, message, data}` 信封两种形态；
 - **null 规范化**：远端对未填充可选字段返回的 `null` 按契约视为缺省后再校验
   （支持契约内本地 `$ref` 解析）；
-- **独立超时**：`diagnose_service` / `dtc_cause_cards_service` 含 LLM/召回/精排，
-  使用独立的 `DIAGNOSE_TIMEOUT`（默认 60s），其余工具用 `RAG_TIMEOUT`（默认 15s）；
-- **错误处理**：无健康实例 / 超时 / 远端错误均返回明确的 `code=50002` 业务错误。
+- **独立超时**：`cause_ranking_service` 使用 `CAUSE_RANKING_TIMEOUT`（默认 50s）；
+  `diagnose_service` / `dtc_cause_cards_service` 使用 `DIAGNOSE_TIMEOUT`（默认 60s），
+  其余工具使用 `RAG_TIMEOUT`（默认 15s）；
+- **错误处理**：RAG 的 502 / 503 / 504 分别映射为 `code=50200 / 50300 / 50400`，
+  其他执行错误沿用中台现有错误码。
 
 ## 快速开始
 
@@ -76,8 +81,10 @@ curl http://localhost:8000/api/v1/tools/dtc_context_service
 # 调用工具
 curl -X POST http://localhost:8000/api/v1/tools/dtc_context_service/invoke \
   -H "Content-Type: application/json" \
-  -d '{"arguments": {"dtc_code": "P0171", "brand": "宝马"}}'
+  -d '{"arguments": {"brand": "丰田", "model": "汉兰达", "year": 2021, "dtc_codes": ["P0136", "P0137"], "language": "en"}}'
 ```
+
+编排层五工具完整示例见 `examples/orchestrator/`。
 
 ## 测试
 
@@ -88,7 +95,7 @@ uv run pytest tests/ -v
 
 # 远程链路冒烟验证（需先启动服务，且上游服务已注册 Nacos）
 uv run python -m app.main
-uv run python verify_rag_chain.py   # 原 6 工具
+uv run python verify_rag_chain.py   # RAG 0.7.0 五工具
 uv run python verify_diagnose.py    # diagnose_service
 ```
 

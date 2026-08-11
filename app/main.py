@@ -113,7 +113,13 @@ async def trace_id_middleware(request: Request, call_next):
 
 @app.exception_handler(ToolPlatformError)
 async def tool_platform_error_handler(request: Request, exc: ToolPlatformError) -> JSONResponse:
-    status_code = 404 if exc.code == 40400 else (400 if exc.code == 40000 else 500)
+    status_code = {
+        40000: 400,
+        40400: 404,
+        50200: 502,
+        50300: 503,
+        50400: 504,
+    }.get(exc.code, 500)
     return JSONResponse(status_code=status_code, content=error(exc.code, exc.message).model_dump())
 
 

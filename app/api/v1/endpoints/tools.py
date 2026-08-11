@@ -56,13 +56,18 @@ def get_tool(
                         "code": 0,
                         "message": "success",
                         "data": {
-                            "dtc_context": {
-                                "dtc_code": "P0171",
-                                "brand": "宝马",
-                                "interpretation_type": "brand_specific",
-                                "source_type": "brand_dtc_data",
-                                "confidence": "high",
-                            },
+                            "contexts": [
+                                {
+                                    "dtc_code": "P0136",
+                                    "match_level": "year_fallback",
+                                    "dtc_description": "氧传感器电路故障",
+                                    "dtc_category": "动力系统",
+                                    "trigger_conditions": [],
+                                    "related_parts": ["后氧传感器"],
+                                    "related_datastreams": ["氧传感器电压"],
+                                }
+                            ],
+                            "issues": [],
                         },
                         "trace_id": "a1b2c3d4e5f6",
                     },

@@ -5,10 +5,16 @@
 """
 from typing import Any
 
+from app.config import get_settings
 from app.core.registry import register_tool
 from app.services.rag_client import rag_client
 
 
 @register_tool("cause_ranking_service")
 def cause_ranking_service(args: dict[str, Any]) -> dict[str, Any]:
-    return rag_client.invoke("cause_ranking_service", "cause-ranking", args)
+    return rag_client.invoke(
+        "cause_ranking_service",
+        "cause-ranking",
+        args,
+        timeout=get_settings().cause_ranking_timeout,
+    )

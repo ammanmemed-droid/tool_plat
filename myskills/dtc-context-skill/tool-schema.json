@@ -1,64 +1,405 @@
 {
   "tool_name": "dtc_context_service",
   "tool_kind": "global_tool_service",
-  "description": "用于将单个 DTC 解析为标准化背景上下文的全局服务。",
+  "description": "按车辆与一个或多个 DTC 一次召回维修知识，返回逐码背景上下文。",
   "input_schema": {
-    "type": "object",
-    "required": ["dtc_code"],
-    "properties": {
-      "dtc_code": {
-        "type": "string",
-        "description": "待解析的 DTC 编码，例如 P0171 或 U0100"
-      },
-      "brand": {
-        "type": "string",
-        "description": "用于品牌语义解析的车辆品牌"
-      },
-      "vehicle_info": {
-        "type": "object",
-        "description": "可选的车辆上下文，例如车型、年款、系统、VIN 或已知配置",
-        "properties": {
-          "model": { "type": "string" },
-          "year": { "type": "string" },
-          "system": { "type": "string" },
-          "vin": { "type": "string" },
-          "configuration": { "type": "string" }
-        }
+    "examples": [
+      {
+        "brand": "丰田",
+        "dtc_codes": [
+          "P0136",
+          "P0137",
+          "P0138",
+          "P0420"
+        ],
+        "language": "en",
+        "model": "汉兰达",
+        "year": 2021
       }
+    ],
+    "properties": {
+      "brand": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Brand",
+        "type": "string"
+      },
+      "model": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Model",
+        "type": "string"
+      },
+      "year": {
+        "anyOf": [
+          {
+            "maximum": 2100,
+            "minimum": 1900,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Year"
+      },
+      "dtc_codes": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "title": "Dtc Codes",
+        "type": "array"
+      },
+      "language": {
+        "default": "en",
+        "description": "Preferred display language as a BCP-47-style tag. Source knowledge is returned unchanged when no reviewed translation exists.",
+        "maxLength": 35,
+        "minLength": 2,
+        "title": "Language",
+        "type": "string"
+      }
+    },
+    "required": [
+      "brand",
+      "model",
+      "dtc_codes"
+    ],
+    "title": "DtcContextV1Input",
+    "type": "object",
+    "additionalProperties": false,
+    "x-extract": {
+      "brand": [
+        "brand",
+        "vehicle_info.brand",
+        "messages[].content[].text.vehicle_info.brand"
+      ],
+      "model": [
+        "vehicle_info.model",
+        "messages[].content[].text.vehicle_info.model",
+        "model"
+      ],
+      "year": [
+        "year",
+        "vehicle_info.year",
+        "messages[].content[].text.vehicle_info.year"
+      ],
+      "dtc_codes": [
+        "dtc_codes",
+        "messages[].content[].dtc_codes",
+        "system_dtc_groups[].dtc_codes[].dtc_code",
+        "messages[].content[].text.system_dtc_groups[].dtc_codes[].dtc_code"
+      ],
+      "language": [
+        "language"
+      ]
     }
   },
   "output_schema": {
-    "type": "object",
-    "required": ["dtc_context"],
-    "properties": {
-      "dtc_context": {
-        "type": "object",
-        "required": ["dtc_code", "interpretation_type", "source_type", "confidence"],
+    "$defs": {
+      "DtcContextItemOut": {
+        "additionalProperties": false,
         "properties": {
-          "dtc_code": { "type": "string" },
-          "brand": { "type": "string" },
-          "dtc_description": { "type": "string" },
-          "system": { "type": "string" },
-          "subsystem": { "type": "string" },
-          "trigger_condition": { "type": "string" },
-          "related_parts": { "type": "array", "items": { "type": "string" } },
-          "related_datastreams": { "type": "array", "items": { "type": "string" } },
-          "interpretation_type": {
-            "type": "string",
-            "enum": ["generic_obd", "brand_specific", "uncertain"]
+          "dtc_code": {
+            "title": "Dtc Code",
+            "type": "string"
           },
-          "source_type": {
-            "type": "string",
-            "enum": ["generic_obd_database", "brand_dtc_data", "dtc_database", "llm_generated"]
+          "match_level": {
+            "enum": [
+              "exact",
+              "year_fallback",
+              "unmatched",
+              "uncertain"
+            ],
+            "title": "Match Level",
+            "type": "string"
           },
-          "confidence": {
-            "type": "string",
-            "enum": ["high", "medium", "low"]
+          "dtc_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dtc Description"
           },
-          "uncertainty_note": { "type": "string" },
-          "missing_required_info": { "type": "array", "items": { "type": "string" } }
-        }
+          "dtc_category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dtc Category"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "System"
+          },
+          "subsystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subsystem"
+          },
+          "trigger_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trigger Conditions",
+            "type": "array"
+          },
+          "related_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Parts",
+            "type": "array"
+          },
+          "related_datastreams": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Datastreams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dtc_code",
+          "match_level",
+          "trigger_conditions",
+          "related_parts",
+          "related_datastreams"
+        ],
+        "title": "DtcContextItemOut",
+        "type": "object"
+      },
+      "MvpIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "unmatched_dtcs",
+              "multiple_groups_detected",
+              "no_candidate_causes",
+              "no_static_checks",
+              "no_repair_guides",
+              "probability_provider_failed",
+              "external_reasons_truncated",
+              "recall_truncated"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dtc Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "MvpIssue",
+        "type": "object"
+      },
+      "RecallMetaOut": {
+        "additionalProperties": false,
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "requested_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Dtcs",
+            "type": "array"
+          },
+          "unmatched_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Dtcs",
+            "type": "array"
+          },
+          "uncertain_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertain Dtcs",
+            "type": "array"
+          },
+          "year_fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Year Fallback Dtcs",
+            "type": "array"
+          },
+          "query_truncated": {
+            "title": "Query Truncated",
+            "type": "boolean"
+          },
+          "recalled_record_count": {
+            "minimum": 0,
+            "title": "Recalled Record Count",
+            "type": "integer"
+          },
+          "requested_language": {
+            "title": "Requested Language",
+            "type": "string"
+          },
+          "source_content_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Content Languages",
+            "type": "array"
+          },
+          "language_fallback": {
+            "title": "Language Fallback",
+            "type": "boolean"
+          },
+          "core_version": {
+            "title": "Core Version",
+            "type": "string"
+          },
+          "grouping_policy_version": {
+            "title": "Grouping Policy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand",
+          "model",
+          "year",
+          "requested_dtcs",
+          "unmatched_dtcs",
+          "uncertain_dtcs",
+          "year_fallback_dtcs",
+          "query_truncated",
+          "recalled_record_count",
+          "requested_language",
+          "source_content_languages",
+          "language_fallback",
+          "core_version",
+          "grouping_policy_version"
+        ],
+        "title": "RecallMetaOut",
+        "type": "object"
       }
-    }
+    },
+    "properties": {
+      "uncertainty_note": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Uncertainty Note"
+      },
+      "missing_required_info": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Missing Required Info"
+      },
+      "contexts": {
+        "items": {
+          "$ref": "#/$defs/DtcContextItemOut"
+        },
+        "title": "Contexts",
+        "type": "array"
+      },
+      "issues": {
+        "items": {
+          "$ref": "#/$defs/MvpIssue"
+        },
+        "title": "Issues",
+        "type": "array"
+      },
+      "meta": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RecallMetaOut"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "contexts",
+      "issues"
+    ],
+    "title": "DtcContextV1Output",
+    "type": "object"
   }
 }

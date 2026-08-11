@@ -119,10 +119,12 @@ class ToolRegistry:
     # ---------- 调用 ----------
 
     def invoke(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """统一调用入口：入参归一化 -> 入参校验 -> 执行 -> 出参校验。"""
+        """统一调用入口：槽位提取 -> 入参归一化 -> 校验 -> 执行 -> 出参校验。"""
+        from app.core.slot_extractor import extract_slots
         from app.tools.argument_normalizers import normalize_arguments
 
         tool = self.get_tool(tool_name)
+        arguments = extract_slots(arguments, tool.input_schema)
         arguments = normalize_arguments(tool_name, arguments)
 
         if tool.input_schema:

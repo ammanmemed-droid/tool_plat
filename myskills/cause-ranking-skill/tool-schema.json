@@ -1,275 +1,614 @@
 {
   "tool_name": "cause_ranking_service",
   "tool_kind": "global_tool_service",
-  "description": "针对当前分析对象（DTC Group、single DTC 或 symptom_case）拉取并排序候选原因的全局服务。",
+  "description": "按车辆与一个已选 DTC 组一次召回维修知识，将数据库候选原因交给生产概率服务排序；远端不可用时自动使用本地概率方法降级。",
   "input_schema": {
-    "type": "object",
-    "required": ["operation", "target_type"],
-    "properties": {
-      "operation": {
-        "type": "string",
-        "enum": ["retrieve_causes", "rank_causes"],
-        "description": "内部执行指令：retrieve_causes 拉取候选原因，rank_causes 排序候选原因"
-      },
-      "target_type": {
-        "type": "string",
-        "enum": ["dtc_group", "single_dtc", "symptom_case"],
-        "description": "当前分析对象类型"
-      },
-      "group_id": {
-        "type": "string",
-        "description": "DTC 分组 ID；target_type 为 dtc_group 时必填"
-      },
-      "dtcs": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "DTC 列表；target_type 为 dtc_group 或 single_dtc 时必填；symptom_case 时可为空"
-      },
-      "symptom_description": {
-        "type": "string",
-        "description": "故障现象描述；target_type 为 symptom_case 时必填；DTC 场景下可作为可选增强信息"
-      },
-      "dtc_result": {
-        "type": "string",
-        "enum": ["unknown", "no_dtc"],
-        "description": "DTC 结果状态；target_type 为 symptom_case 时必填"
-      },
-      "brand": {
-        "type": "string",
-        "description": "车辆品牌，用于限定品牌语义、原因数据匹配口径和维修资料范围"
-      },
-      "system": {
-        "type": "string",
-        "description": "所属系统；DTC 场景通常必备，symptom_case 下无法确定时可为空"
-      },
-      "related_parts": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "当前分析对象涉及的相关零件或部件"
-      },
-      "vehicle_info": {
-        "type": "object",
-        "description": "可选车辆上下文，用于提高原因匹配准确性",
-        "properties": {
-          "model": { "type": "string" },
-          "year": { "type": "string" },
-          "engine": { "type": "string" },
-          "vin": { "type": "string" },
-          "configuration": { "type": "string" }
-        }
-      },
-      "candidate_causes": {
-        "type": "array",
-        "description": "候选原因列表；operation 为 rank_causes 时必填，由 retrieve_causes 拉取得到",
-        "items": {
-          "type": "object",
-          "required": ["cause_name", "cause_source"],
-          "properties": {
-            "cause_id": { "type": "string" },
-            "temporary_cause_id": { "type": "string" },
-            "cause_name": { "type": "string" },
-            "cause_source": {
-              "type": "string",
-              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
-            },
-            "source_reference": { "type": "string" },
-            "supported_dtcs": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "related_parts": {
-              "type": "array",
-              "items": { "type": "string" }
-            }
-          }
-        }
-      },
-      "datastreams": {
-        "type": "array",
-        "description": "实测数据流或诊断数据，用于判断候选原因与车辆状态是否一致",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" },
-            "value": { "type": "string" },
-            "unit": { "type": "string" }
-          }
-        }
-      },
-      "freeze_frame": {
-        "type": "object",
-        "description": "故障发生时的车辆状态，用于辅助原因排序"
-      },
-      "inspection_results": {
-        "type": "array",
-        "description": "Diagnostic Planning 或用户反馈的检查结果",
-        "items": {
-          "type": "object",
-          "properties": {
-            "item": { "type": "string" },
-            "result": { "type": "string" },
-            "note": { "type": "string" }
-          }
-        }
-      },
-      "repair_feedback": {
-        "type": "array",
-        "description": "用户已执行维修及维修后结果",
-        "items": {
-          "type": "object",
-          "properties": {
-            "action": { "type": "string" },
-            "part": { "type": "string" },
-            "outcome": { "type": "string" }
-          }
-        }
-      },
-      "recurrence_result": {
-        "type": "object",
-        "description": "清码、路试、复扫后的故障复现情况",
-        "properties": {
-          "cleared": { "type": "boolean" },
-          "recurred": { "type": "boolean" },
-          "note": { "type": "string" }
-        }
-      },
-      "ranked_causes": {
-        "type": "array",
-        "description": "上一轮排序结果；有新增证据时作为排序更新基础",
-        "items": {
-          "type": "object",
-          "required": ["cause_name", "cause_source", "priority", "confidence", "ranking_basis"],
-          "properties": {
-            "cause_id": { "type": "string" },
-            "temporary_cause_id": { "type": "string" },
-            "cause_name": { "type": "string" },
-            "cause_source": {
-              "type": "string",
-              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
-            },
-            "source_reference": { "type": "string" },
-            "supported_dtcs": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "related_parts": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "priority": {
-              "type": "string",
-              "enum": ["high", "medium", "low"]
-            },
-            "confidence": {
-              "type": "string",
-              "enum": ["high", "medium", "low"]
-            },
-            "ranking_basis": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "uncertainty_note": { "type": "string" }
-          }
-        }
+    "examples": [
+      {
+        "brand": "丰田",
+        "dtc_codes": [
+          "P0136",
+          "P0137",
+          "P0138"
+        ],
+        "language": "en",
+        "model": "汉兰达",
+        "year": 2021
       }
+    ],
+    "properties": {
+      "brand": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Brand",
+        "type": "string"
+      },
+      "model": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Model",
+        "type": "string"
+      },
+      "year": {
+        "anyOf": [
+          {
+            "maximum": 2100,
+            "minimum": 1900,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Year"
+      },
+      "dtc_codes": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "title": "Dtc Codes",
+        "type": "array"
+      },
+      "language": {
+        "default": "en",
+        "description": "Preferred display language as a BCP-47-style tag. Source knowledge is returned unchanged when no reviewed translation exists.",
+        "maxLength": 35,
+        "minLength": 2,
+        "title": "Language",
+        "type": "string"
+      }
+    },
+    "required": [
+      "brand",
+      "model",
+      "dtc_codes"
+    ],
+    "title": "CauseRankingV1Input",
+    "type": "object",
+    "additionalProperties": false,
+    "x-extract": {
+      "brand": [
+        "brand",
+        "vehicle_info.brand",
+        "messages[].content[].text.vehicle_info.brand"
+      ],
+      "model": [
+        "vehicle_info.model",
+        "messages[].content[].text.vehicle_info.model",
+        "model"
+      ],
+      "year": [
+        "year",
+        "vehicle_info.year",
+        "messages[].content[].text.vehicle_info.year"
+      ],
+      "dtc_codes": [
+        "dtc_codes",
+        "messages[].content[].dtc_codes",
+        "system_dtc_groups[].dtc_codes[].dtc_code",
+        "messages[].content[].text.system_dtc_groups[].dtc_codes[].dtc_code"
+      ],
+      "language": [
+        "language"
+      ]
     }
   },
   "output_schema": {
-    "type": "object",
-    "properties": {
-      "candidate_causes": {
-        "type": "array",
-        "description": "retrieve_causes 的内部中间结果，不作为 Diagnostic Planning 的正式输入",
-        "items": {
-          "type": "object",
-          "required": ["cause_name", "cause_source"],
-          "properties": {
-            "cause_id": { "type": "string" },
-            "temporary_cause_id": { "type": "string" },
-            "cause_name": { "type": "string" },
-            "cause_source": {
-              "type": "string",
-              "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
-            },
-            "source_reference": { "type": "string" },
-            "supported_dtcs": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "related_parts": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "uncertainty_note": { "type": "string" }
-          }
-        }
-      },
-      "ranking_result": {
-        "type": ["object", "null"],
-        "description": "本次 Cause Ranking 的整体排序结果；信息不足时为 null",
-        "required": ["target_type", "ranked_causes"],
+    "$defs": {
+      "CausePredictionOut": {
+        "additionalProperties": false,
         "properties": {
-          "target_type": {
-            "type": "string",
-            "enum": ["dtc_group", "single_dtc", "symptom_case"]
+          "rank": {
+            "minimum": 1,
+            "title": "Rank",
+            "type": "integer"
           },
-          "group_id": { "type": "string" },
-          "dtc_result": {
-            "type": "string",
-            "enum": ["unknown", "no_dtc"]
-          },
-          "dtcs": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "symptom_description": { "type": "string" },
-          "system": { "type": "string" },
-          "ranked_causes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["cause_name", "cause_source", "priority", "confidence", "ranking_basis"],
-              "properties": {
-                "cause_id": { "type": "string" },
-                "temporary_cause_id": { "type": "string" },
-                "cause_name": { "type": "string" },
-                "cause_source": {
-                  "type": "string",
-                  "enum": ["structured_reason_data", "retrieved_oem_document", "llm_generated"]
-                },
-                "source_reference": { "type": "string" },
-                "supported_dtcs": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "related_parts": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "priority": {
-                  "type": "string",
-                  "enum": ["high", "medium", "low"]
-                },
-                "confidence": {
-                  "type": "string",
-                  "enum": ["high", "medium", "low"]
-                },
-                "ranking_basis": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "uncertainty_note": { "type": "string" }
+          "candidate_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
-            }
+            ],
+            "default": null,
+            "description": "Request-local deterministic key; not a persistent business identifier.",
+            "title": "Candidate Key"
           },
-          "uncertainty_note": { "type": "string" }
-        }
+          "reason_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reason_language": {
+            "default": "und",
+            "title": "Reason Language",
+            "type": "string"
+          },
+          "probability_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Probability Percent",
+            "type": "number"
+          },
+          "is_external": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Is External"
+          },
+          "prediction_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prediction Source"
+          },
+          "probability_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Probability Source"
+          },
+          "supported_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Dtcs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rank",
+          "reason",
+          "probability_percent",
+          "supported_dtcs"
+        ],
+        "title": "CausePredictionOut",
+        "type": "object"
       },
-      "uncertainty_note": { "type": "string" },
-      "missing_required_info": {
-        "type": "array",
-        "items": { "type": "string" }
+      "MvpGroupOut": {
+        "additionalProperties": false,
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "representative_dtc": {
+            "title": "Representative Dtc",
+            "type": "string"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dtc Codes",
+            "type": "array"
+          },
+          "dtc_category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "动力系统",
+                  "底盘系统",
+                  "车身系统",
+                  "网络通讯系统"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dtc Category"
+          },
+          "dtc_category_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P",
+                  "C",
+                  "B",
+                  "U"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dtc Category Code"
+          },
+          "semantic_family_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Semantic Family Code"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "System"
+          },
+          "involved_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Involved Parts",
+            "type": "array"
+          },
+          "shared_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shared Parts",
+            "type": "array"
+          },
+          "group_reason": {
+            "enum": [
+              "same_code",
+              "same_system_shared_parts",
+              "shared_parts",
+              "semantic_family",
+              "standalone"
+            ],
+            "title": "Group Reason",
+            "type": "string"
+          },
+          "grouping_basis": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Grouping Basis",
+            "type": "array"
+          },
+          "match_level": {
+            "enum": [
+              "exact",
+              "year_fallback"
+            ],
+            "title": "Match Level",
+            "type": "string"
+          },
+          "year_fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Year Fallback Dtcs",
+            "type": "array"
+          },
+          "member_count": {
+            "description": "Number of unique DTC codes",
+            "minimum": 1,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "record_count": {
+            "minimum": 1,
+            "title": "Record Count",
+            "type": "integer"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Reserved until the product rule for group priority is confirmed.",
+            "title": "Priority"
+          }
+        },
+        "required": [
+          "group_id",
+          "group_name",
+          "representative_dtc",
+          "dtc_codes",
+          "involved_parts",
+          "shared_parts",
+          "group_reason",
+          "grouping_basis",
+          "match_level",
+          "year_fallback_dtcs",
+          "member_count",
+          "record_count"
+        ],
+        "title": "MvpGroupOut",
+        "type": "object"
+      },
+      "MvpIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "unmatched_dtcs",
+              "multiple_groups_detected",
+              "no_candidate_causes",
+              "no_static_checks",
+              "no_repair_guides",
+              "probability_provider_failed",
+              "external_reasons_truncated",
+              "recall_truncated"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dtc Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "MvpIssue",
+        "type": "object"
+      },
+      "RecallMetaOut": {
+        "additionalProperties": false,
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "requested_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Dtcs",
+            "type": "array"
+          },
+          "unmatched_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Dtcs",
+            "type": "array"
+          },
+          "uncertain_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertain Dtcs",
+            "type": "array"
+          },
+          "year_fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Year Fallback Dtcs",
+            "type": "array"
+          },
+          "query_truncated": {
+            "title": "Query Truncated",
+            "type": "boolean"
+          },
+          "recalled_record_count": {
+            "minimum": 0,
+            "title": "Recalled Record Count",
+            "type": "integer"
+          },
+          "requested_language": {
+            "title": "Requested Language",
+            "type": "string"
+          },
+          "source_content_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Content Languages",
+            "type": "array"
+          },
+          "language_fallback": {
+            "title": "Language Fallback",
+            "type": "boolean"
+          },
+          "core_version": {
+            "title": "Core Version",
+            "type": "string"
+          },
+          "grouping_policy_version": {
+            "title": "Grouping Policy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand",
+          "model",
+          "year",
+          "requested_dtcs",
+          "unmatched_dtcs",
+          "uncertain_dtcs",
+          "year_fallback_dtcs",
+          "query_truncated",
+          "recalled_record_count",
+          "requested_language",
+          "source_content_languages",
+          "language_fallback",
+          "core_version",
+          "grouping_policy_version"
+        ],
+        "title": "RecallMetaOut",
+        "type": "object"
       }
-    }
+    },
+    "properties": {
+      "uncertainty_note": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Uncertainty Note"
+      },
+      "missing_required_info": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Missing Required Info"
+      },
+      "group": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MvpGroupOut"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "predictions": {
+        "items": {
+          "$ref": "#/$defs/CausePredictionOut"
+        },
+        "title": "Predictions",
+        "type": "array"
+      },
+      "local_candidate_count": {
+        "minimum": 0,
+        "title": "Local Candidate Count",
+        "type": "integer"
+      },
+      "probability_source": {
+        "enum": [
+          "remote_hybrid",
+          "local_assessor",
+          "even_shares",
+          "not_available"
+        ],
+        "title": "Probability Source",
+        "type": "string"
+      },
+      "probability_degraded": {
+        "title": "Probability Degraded",
+        "type": "boolean"
+      },
+      "issues": {
+        "items": {
+          "$ref": "#/$defs/MvpIssue"
+        },
+        "title": "Issues",
+        "type": "array"
+      },
+      "meta": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RecallMetaOut"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "group",
+      "predictions",
+      "local_candidate_count",
+      "probability_source",
+      "probability_degraded",
+      "issues"
+    ],
+    "title": "CauseRankingV1Output",
+    "type": "object"
   }
 }

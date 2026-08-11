@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     rag_base_url: str = ""
     # 普通工具调用超时（秒）
     rag_timeout: float = 15.0
+    # 原因概率排序总预算为 45 秒，中台预留网络与响应解析余量
+    cause_ranking_timeout: float = 50.0
     # 综合诊断 / 原因卡片调用超时（秒，含 LLM，耗时长于普通工具）
     diagnose_timeout: float = 60.0
     # 实例列表实时查询超时（秒，每次调用直接向 Nacos 查询，不做缓存）

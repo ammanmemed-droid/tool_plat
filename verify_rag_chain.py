@@ -1,58 +1,60 @@
-"""验证远程工具经 Nacos 发现转发到 roxie-rag-service 的全链路。"""
+"""验证 RAG 0.7.0 五工具经 Tool 中台转发的完整链路。"""
+from __future__ import annotations
+
+import argparse
 import json
 
 import httpx
 
-BASE = "http://localhost:8000/api/v1"
-c = httpx.Client(timeout=30)
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base-url", default="http://localhost:8000/api/v1")
+    parser.add_argument("--timeout", type=float, default=60.0)
+    return parser.parse_args()
 
 
-def invoke(tool: str, args: dict) -> dict:
-    r = c.post(f"{BASE}/tools/{tool}/invoke", json={"arguments": args})
-    b = r.json()
-    if b.get("code") == 0:
-        print(f"[OK] {tool} (HTTP {r.status_code})", flush=True)
-    else:
-        print(f"[ERR] {tool}: code={b.get('code')} msg={str(b.get('message'))[:120]}", flush=True)
-    return b
+def main() -> int:
+    options = parse_args()
+    client = httpx.Client(timeout=options.timeout)
+
+    def invoke(tool_name: str, arguments: dict) -> dict:
+        response = client.post(
+            f"{options.base_url.rstrip('/')}/tools/{tool_name}/invoke",
+            json={"arguments": arguments},
+            headers={"X-Trace-ID": f"verify-{tool_name}"},
+        )
+        body = response.json()
+        if response.status_code != 200 or body.get("code") != 0:
+            raise RuntimeError(
+                f"{tool_name} failed: HTTP {response.status_code}, "
+                f"code={body.get('code')}, message={body.get('message')}"
+            )
+        print(f"[OK] {tool_name}: {json.dumps(body['data'], ensure_ascii=False)[:240]}")
+        return body["data"]
+
+    full_scan = {
+        "brand": "丰田",
+        "model": "汉兰达",
+        "year": 2021,
+        "dtc_codes": ["P0136", "P0137", "P0138", "P0420"],
+        "language": "en",
+    }
+    invoke("dtc_context_service", full_scan)
+    grouping = invoke("dtc_grouping_service", full_scan)
+    groups = grouping.get("groups") or []
+    if not groups:
+        raise RuntimeError("dtc_grouping_service returned no selectable groups")
+
+    selected_group = {
+        **full_scan,
+        "dtc_codes": groups[0]["dtc_codes"],
+    }
+    invoke("cause_ranking_service", selected_group)
+    invoke("diagnostic_planning_service", selected_group)
+    invoke("repair_planning_service", selected_group)
+    return 0
 
 
-# 1. dtc_context
-b = invoke("dtc_context_service", {"dtc_code": "P0171", "brand": "宝马"})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
-
-# 2. dtc_grouping
-b = invoke("dtc_grouping_service", {
-    "dtc_list": ["P0171", "P0300"],
-    "brand": "宝马",
-    "dtc_entries": [
-        {"dtc_code": "P0171", "system": "发动机系统", "related_parts": ["真空管路", "MAF 空气流量传感器"]},
-        {"dtc_code": "P0300", "system": "发动机系统", "related_parts": ["火花塞", "真空管路"]},
-    ],
-})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
-
-# 3. cause_ranking
-b = invoke("cause_ranking_service", {
-    "operation": "retrieve_causes", "target_type": "single_dtc",
-    "dtcs": ["P0171"], "brand": "宝马",
-})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
-
-# 4. diagnostic_planning
-b = invoke("diagnostic_planning_service", {
-    "operation": "retrieve_checks", "target_type": "single_dtc",
-    "dtcs": ["P0171"], "brand": "宝马",
-})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
-
-# 5. repair_planning
-b = invoke("repair_planning_service", {
-    "repair_target": {"target_name": "进气系统真空泄漏", "target_status": "confirmed"},
-    "brand": "宝马",
-})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
-
-# 6. maintenance_light_reset 仍为本地实现
-b = invoke("maintenance_light_reset_service", {"brand": "奔驰", "model": "C200", "year": "2010"})
-print("   ", json.dumps(b.get("data"), ensure_ascii=False)[:300], flush=True)
+if __name__ == "__main__":
+    raise SystemExit(main())

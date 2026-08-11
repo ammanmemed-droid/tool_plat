@@ -3,7 +3,7 @@
     "brand": "丰田",
     "model": "汉兰达",
     "year": 2021,
-    "dtc_codes": ["P0136", "P0137", "P0138", "P0420"],
+    "dtc_codes": ["P0136", "P0137", "P0138"],
     "language": "en"
   }
 }

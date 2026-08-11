@@ -1,191 +1,112 @@
 {
   "tool_name": "dtc_grouping_service",
   "tool_kind": "global_tool_service",
-  "description": "先按 PCBU 一级分类，再按规范化故障零部件交集聚合分组的全局服务，输出 DTC Group 或 independent DTC。",
+  "description": "按车辆与一个或多个 DTC 一次召回维修知识，按稳定规则返回故障组、分组依据与未成组 DTC。",
   "input_schema": {
-    "$defs": {
-      "DtcEntry": {
-        "properties": {
-          "record_id": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "可选知识记录 ID",
-            "title": "Record Id"
-          },
-          "dtc_code": {
-            "minLength": 1,
-            "title": "Dtc Code",
-            "type": "string"
-          },
-          "dtc_category": {
-            "anyOf": [
-              {
-                "enum": [
-                  "动力系统",
-                  "底盘系统",
-                  "车身系统",
-                  "网络通讯系统"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "省略时由 dtc_code 的 PCBU 首字母自动派生",
-            "title": "Dtc Category"
-          },
-          "system": {
-            "description": "一级分类下的二级系统名",
-            "minLength": 1,
-            "title": "System",
-            "type": "string"
-          },
-          "related_parts": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Related Parts",
-            "type": "array"
-          }
-        },
-        "required": [
-          "dtc_code",
-          "system",
-          "related_parts"
+    "examples": [
+      {
+        "brand": "丰田",
+        "dtc_codes": [
+          "P0136",
+          "P0137",
+          "P0138",
+          "P0420"
         ],
-        "title": "DtcEntry",
-        "type": "object"
-      },
-      "VehicleContext": {
-        "properties": {
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Model"
-          },
-          "year": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Year"
-          },
-          "engine": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Engine"
-          },
-          "vin": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Vin"
-          },
-          "configuration": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Configuration"
-          }
-        },
-        "title": "VehicleContext",
-        "type": "object"
+        "language": "en",
+        "model": "汉兰达",
+        "year": 2021
       }
-    },
+    ],
     "properties": {
-      "dtc_list": {
-        "description": "待分组的 DTC 列表；至少需要两个不同 DTC，单个 DTC 请使用 dtc_context_service。",
-        "items": {
-          "type": "string"
-        },
-        "minItems": 2,
-        "title": "Dtc List",
-        "type": "array"
-      },
       "brand": {
+        "maxLength": 64,
         "minLength": 1,
         "title": "Brand",
         "type": "string"
       },
-      "dtc_entries": {
-        "items": {
-          "$ref": "#/$defs/DtcEntry"
-        },
-        "title": "Dtc Entries",
-        "type": "array"
+      "model": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Model",
+        "type": "string"
       },
-      "vehicle_info": {
+      "year": {
         "anyOf": [
           {
-            "$ref": "#/$defs/VehicleContext"
+            "maximum": 2100,
+            "minimum": 1900,
+            "type": "integer"
           },
           {
             "type": "null"
           }
         ],
-        "default": null
+        "default": null,
+        "title": "Year"
+      },
+      "dtc_codes": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "title": "Dtc Codes",
+        "type": "array"
+      },
+      "language": {
+        "default": "en",
+        "description": "Preferred display language as a BCP-47-style tag. Source knowledge is returned unchanged when no reviewed translation exists.",
+        "maxLength": 35,
+        "minLength": 2,
+        "title": "Language",
+        "type": "string"
       }
     },
     "required": [
-      "dtc_list",
       "brand",
-      "dtc_entries"
+      "model",
+      "dtc_codes"
     ],
-    "title": "DtcGroupingToolInput",
-    "type": "object"
+    "title": "DtcGroupingV1Input",
+    "type": "object",
+    "additionalProperties": false,
+    "x-extract": {
+      "brand": [
+        "brand",
+        "vehicle_info.brand",
+        "messages[].content[].text.vehicle_info.brand"
+      ],
+      "model": [
+        "vehicle_info.model",
+        "messages[].content[].text.vehicle_info.model",
+        "model"
+      ],
+      "year": [
+        "year",
+        "vehicle_info.year",
+        "messages[].content[].text.vehicle_info.year"
+      ],
+      "dtc_codes": [
+        "dtc_codes",
+        "messages[].content[].dtc_codes",
+        "system_dtc_groups[].dtc_codes[].dtc_code",
+        "messages[].content[].text.system_dtc_groups[].dtc_codes[].dtc_code"
+      ],
+      "language": [
+        "language"
+      ]
+    }
   },
   "output_schema": {
     "$defs": {
-      "DtcGroupData": {
+      "MvpGroupOut": {
+        "additionalProperties": false,
         "properties": {
           "group_id": {
             "title": "Group Id",
             "type": "string"
           },
           "group_name": {
-            "deprecated": true,
-            "description": "中台兼容组名；新调用方优先使用 group_names",
             "title": "Group Name",
             "type": "string"
           },
@@ -200,30 +121,6 @@
             "title": "Dtc Codes",
             "type": "array"
           },
-          "dtcs": {
-            "deprecated": true,
-            "description": "中台兼容 DTC 列表；新调用方优先使用 dtc_codes",
-            "items": {
-              "type": "string"
-            },
-            "title": "Dtcs",
-            "type": "array"
-          },
-          "record_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "title": "Record Ids",
-            "type": "array"
-          },
-          "group_names": {
-            "description": "组名来源：组内各逻辑 DTC 共享的规范化零部件",
-            "items": {
-              "type": "string"
-            },
-            "title": "Group Names",
-            "type": "array"
-          },
           "dtc_category": {
             "anyOf": [
               {
@@ -239,7 +136,38 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Dtc Category"
+          },
+          "dtc_category_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "P",
+                  "C",
+                  "B",
+                  "U"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dtc Category Code"
+          },
+          "semantic_family_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Semantic Family Code"
           },
           "system": {
             "anyOf": [
@@ -251,29 +179,32 @@
               }
             ],
             "default": null,
-            "description": "共同二级系统名；跨系统聚类时为 null",
             "title": "System"
+          },
+          "involved_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Involved Parts",
+            "type": "array"
+          },
+          "shared_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shared Parts",
+            "type": "array"
           },
           "group_reason": {
             "enum": [
               "same_code",
               "same_system_shared_parts",
               "shared_parts",
+              "semantic_family",
               "standalone"
             ],
             "title": "Group Reason",
             "type": "string"
-          },
-          "member_count": {
-            "title": "Member Count",
-            "type": "integer"
-          },
-          "related_parts": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Related Parts",
-            "type": "array"
           },
           "grouping_basis": {
             "items": {
@@ -282,13 +213,49 @@
             "title": "Grouping Basis",
             "type": "array"
           },
-          "grouping_confidence": {
+          "match_level": {
             "enum": [
-              "high",
-              "medium"
+              "exact",
+              "year_fallback"
             ],
-            "title": "Grouping Confidence",
+            "title": "Match Level",
             "type": "string"
+          },
+          "year_fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Year Fallback Dtcs",
+            "type": "array"
+          },
+          "member_count": {
+            "description": "Number of unique DTC codes",
+            "minimum": 1,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "record_count": {
+            "minimum": 1,
+            "title": "Record Count",
+            "type": "integer"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Reserved until the product rule for group priority is confirmed.",
+            "title": "Priority"
           }
         },
         "required": [
@@ -296,47 +263,158 @@
           "group_name",
           "representative_dtc",
           "dtc_codes",
-          "dtcs",
-          "record_ids",
-          "group_names",
-          "dtc_category",
+          "involved_parts",
+          "shared_parts",
           "group_reason",
-          "member_count",
-          "related_parts",
           "grouping_basis",
-          "grouping_confidence"
+          "match_level",
+          "year_fallback_dtcs",
+          "member_count",
+          "record_count"
         ],
-        "title": "DtcGroupData",
+        "title": "MvpGroupOut",
+        "type": "object"
+      },
+      "MvpIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "unmatched_dtcs",
+              "multiple_groups_detected",
+              "no_candidate_causes",
+              "no_static_checks",
+              "no_repair_guides",
+              "probability_provider_failed",
+              "external_reasons_truncated",
+              "recall_truncated"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "dtc_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dtc Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "MvpIssue",
+        "type": "object"
+      },
+      "RecallMetaOut": {
+        "additionalProperties": false,
+        "properties": {
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "requested_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Dtcs",
+            "type": "array"
+          },
+          "unmatched_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Dtcs",
+            "type": "array"
+          },
+          "uncertain_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertain Dtcs",
+            "type": "array"
+          },
+          "year_fallback_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Year Fallback Dtcs",
+            "type": "array"
+          },
+          "query_truncated": {
+            "title": "Query Truncated",
+            "type": "boolean"
+          },
+          "recalled_record_count": {
+            "minimum": 0,
+            "title": "Recalled Record Count",
+            "type": "integer"
+          },
+          "requested_language": {
+            "title": "Requested Language",
+            "type": "string"
+          },
+          "source_content_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Content Languages",
+            "type": "array"
+          },
+          "language_fallback": {
+            "title": "Language Fallback",
+            "type": "boolean"
+          },
+          "core_version": {
+            "title": "Core Version",
+            "type": "string"
+          },
+          "grouping_policy_version": {
+            "title": "Grouping Policy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brand",
+          "model",
+          "year",
+          "requested_dtcs",
+          "unmatched_dtcs",
+          "uncertain_dtcs",
+          "year_fallback_dtcs",
+          "query_truncated",
+          "recalled_record_count",
+          "requested_language",
+          "source_content_languages",
+          "language_fallback",
+          "core_version",
+          "grouping_policy_version"
+        ],
+        "title": "RecallMetaOut",
         "type": "object"
       }
     },
     "properties": {
-      "dtc_groups": {
-        "items": {
-          "$ref": "#/$defs/DtcGroupData"
-        },
-        "title": "Dtc Groups",
-        "type": "array"
-      },
-      "independent_dtcs": {
-        "items": {
-          "type": "string"
-        },
-        "title": "Independent Dtcs",
-        "type": "array"
-      },
-      "grouping_result": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Grouping Result"
-      },
       "uncertainty_note": {
         "anyOf": [
           {
@@ -363,13 +441,46 @@
         ],
         "default": null,
         "title": "Missing Required Info"
+      },
+      "groups": {
+        "items": {
+          "$ref": "#/$defs/MvpGroupOut"
+        },
+        "title": "Groups",
+        "type": "array"
+      },
+      "standalone_dtcs": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Standalone Dtcs",
+        "type": "array"
+      },
+      "issues": {
+        "items": {
+          "$ref": "#/$defs/MvpIssue"
+        },
+        "title": "Issues",
+        "type": "array"
+      },
+      "meta": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RecallMetaOut"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       }
     },
     "required": [
-      "dtc_groups",
-      "independent_dtcs"
+      "groups",
+      "standalone_dtcs",
+      "issues"
     ],
-    "title": "DtcGroupingToolOutput",
+    "title": "DtcGroupingV1Output",
     "type": "object"
   }
 }

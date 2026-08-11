@@ -40,15 +40,21 @@ class ToolInvokeRequest(BaseModel):
     model_config = ConfigDict(extra="allow", json_schema_extra={
         "examples": [
             {
-                "arguments": {"dtc_code": "P0171", "brand": "宝马"},
+                "arguments": {
+                    "brand": "丰田",
+                    "model": "汉兰达",
+                    "year": 2021,
+                    "dtc_codes": ["P0136", "P0137", "P0138", "P0420"],
+                    "language": "en",
+                },
             },
             {
                 "arguments": {
-                    "operation": "retrieve_causes",
-                    "target_type": "single_dtc",
-                    "dtcs": ["P0171"],
-                    "brand": "宝马",
-                    "system": "发动机系统",
+                    "brand": "丰田",
+                    "model": "汉兰达",
+                    "year": 2021,
+                    "dtc_codes": ["P0136", "P0137", "P0138"],
+                    "language": "en",
                 },
             },
             {

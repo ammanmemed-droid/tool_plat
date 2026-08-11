@@ -22,14 +22,3 @@ def normalize_arguments(tool_name: str, arguments: dict[str, Any]) -> dict[str, 
     if normalizer is None:
         return arguments
     return normalizer(dict(arguments))
-
-
-def _flatten_vehicle_info(payload: dict[str, Any]) -> dict[str, Any]:
-    """将顶层 model/year 等字段合并进 vehicle_info。"""
-    vehicle_info = dict(payload.get("vehicle_info") or {})
-    for key in ("model", "year", "engine", "vin", "configuration"):
-        if key in payload:
-            vehicle_info.setdefault(key, payload.pop(key))
-    if vehicle_info:
-        payload["vehicle_info"] = vehicle_info
-    return payload
