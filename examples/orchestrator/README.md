@@ -8,7 +8,8 @@ Content-Type: application/json
 ```
 
 Context、Grouping 使用 full scan 示例；Cause、Diagnostic、Repair 使用 Grouping 返回的一个完整
-`groups[].dtc_codes`。五个请求文件均可直接作为请求体。
+`groups[].dtc_codes`。本文档已内嵌五个完整请求体，可以直接单文件发送给编排层同事，
+无需同时发送其他 JSON 文件。
 
 中台通过 Nacos 服务名 `roxie-supper-rag-service` 发现 RAG；当前联调直连地址为
 `http://172.16.67.169:8000`。编排层统一调用 Tool 中台 `/invoke`，不直接调用 RAG。
@@ -56,7 +57,24 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 - 用途：批量查询 DTC 的描述、分类、系统、触发条件、关联部件和数据流上下文。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入车辆本次扫描得到的完整 DTC 列表，可同时传多个故障码。
-- 请求文件：[dtc_context_invoke.json](./dtc_context_invoke.json)
+
+请求 JSON：
+
+```json
+{
+  "request_id": "orchestration-dtc_context_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
+  "arguments": {
+    "brand": "丰田",
+    "model": "汉兰达",
+    "year": 2021,
+    "dtc_codes": ["P0136", "P0137", "P0138", "P0420"],
+    "language": "en"
+  }
+}
+```
 
 ### 2. `dtc_grouping_service`
 
@@ -65,7 +83,24 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 - 用途：把车辆完整 DTC 列表按系统、语义原因和关联部件分组。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入车辆本次扫描得到的完整 DTC 列表；后续三个工具应使用返回的一个完整 `groups[].dtc_codes`。
-- 请求文件：[dtc_grouping_invoke.json](./dtc_grouping_invoke.json)
+
+请求 JSON：
+
+```json
+{
+  "request_id": "orchestration-dtc_grouping_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
+  "arguments": {
+    "brand": "丰田",
+    "model": "汉兰达",
+    "year": 2021,
+    "dtc_codes": ["P0136", "P0137", "P0138", "P0420"],
+    "language": "en"
+  }
+}
+```
 
 ### 3. `cause_ranking_service`
 
@@ -74,7 +109,24 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 - 用途：对一个 DTC 分组的候选故障原因进行概率排序。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`，不要把多个分组混在一次请求中。
-- 请求文件：[cause_ranking_invoke.json](./cause_ranking_invoke.json)
+
+请求 JSON：
+
+```json
+{
+  "request_id": "orchestration-cause_ranking_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
+  "arguments": {
+    "brand": "丰田",
+    "model": "汉兰达",
+    "year": 2021,
+    "dtc_codes": ["P0136", "P0137", "P0138"],
+    "language": "en"
+  }
+}
+```
 
 ### 4. `diagnostic_planning_service`
 
@@ -83,7 +135,24 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 - 用途：为一个 DTC 分组生成静态诊断检查项和判断依据。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`。
-- 请求文件：[diagnostic_planning_invoke.json](./diagnostic_planning_invoke.json)
+
+请求 JSON：
+
+```json
+{
+  "request_id": "orchestration-diagnostic_planning_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
+  "arguments": {
+    "brand": "丰田",
+    "model": "汉兰达",
+    "year": 2021,
+    "dtc_codes": ["P0136", "P0137", "P0138"],
+    "language": "en"
+  }
+}
+```
 
 ### 5. `repair_planning_service`
 
@@ -92,7 +161,24 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 - 用途：为一个 DTC 分组生成维修方案、关联部件和维修后验证要求。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`。
-- 请求文件：[repair_planning_invoke.json](./repair_planning_invoke.json)
+
+请求 JSON：
+
+```json
+{
+  "request_id": "orchestration-repair_planning_service-001",
+  "session_id": "repair-session-001",
+  "tenant_id": "tenant-demo",
+  "task_id": 1001,
+  "arguments": {
+    "brand": "丰田",
+    "model": "汉兰达",
+    "year": 2021,
+    "dtc_codes": ["P0136", "P0137", "P0138"],
+    "language": "en"
+  }
+}
+```
 
 推荐调用顺序：
 
@@ -113,7 +199,7 @@ dtc_context_service（完整 DTC）
 curl -X POST http://localhost:8000/api/v1/tools/dtc_grouping_service/invoke \
   -H "Content-Type: application/json" \
   -H "X-Trace-ID: orchestration-demo-001" \
-  --data-binary @examples/orchestrator/dtc_grouping_invoke.json
+  --data-raw '{"request_id":"orchestration-dtc_grouping_service-001","session_id":"repair-session-001","tenant_id":"tenant-demo","task_id":1001,"arguments":{"brand":"丰田","model":"汉兰达","year":2021,"dtc_codes":["P0136","P0137","P0138","P0420"],"language":"en"}}'
 ```
 
 成功响应统一为：
