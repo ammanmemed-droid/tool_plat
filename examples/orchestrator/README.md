@@ -10,6 +10,17 @@ Content-Type: application/json
 Context、Grouping 使用 full scan 示例；Cause、Diagnostic、Repair 使用 Grouping 返回的一个完整
 `groups[].dtc_codes`。五个请求文件均可直接作为请求体。
 
+中台通过 Nacos 服务名 `roxie-supper-rag-service` 发现 RAG；当前联调直连地址为
+`http://172.16.67.169:8000`。编排层统一调用 Tool 中台 `/invoke`，不直接调用 RAG。
+
+| Tool 工具 | Tool 中台接口 | 对应 RAG 强类型接口 |
+|---|---|---|
+| `dtc_context_service` | `POST /api/v1/tools/dtc_context_service/invoke` | `POST /api/v1/tool-services/dtc-context` |
+| `dtc_grouping_service` | `POST /api/v1/tools/dtc_grouping_service/invoke` | `POST /api/v1/tool-services/dtc-grouping` |
+| `cause_ranking_service` | `POST /api/v1/tools/cause_ranking_service/invoke` | `POST /api/v1/tool-services/cause-ranking` |
+| `diagnostic_planning_service` | `POST /api/v1/tools/diagnostic_planning_service/invoke` | `POST /api/v1/tool-services/diagnostic-planning` |
+| `repair_planning_service` | `POST /api/v1/tools/repair_planning_service/invoke` | `POST /api/v1/tool-services/repair-planning` |
+
 请求体顶层字段名为 `id` 或以 `_id` 结尾的字符串/整数会原样回显到 `echo`，但不会进入
 Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不回显。
 
@@ -41,6 +52,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 ### 1. `dtc_context_service`
 
 - 地址：`POST /api/v1/tools/dtc_context_service/invoke`
+- 对应 RAG 接口：`POST /api/v1/tool-services/dtc-context`
 - 用途：批量查询 DTC 的描述、分类、系统、触发条件、关联部件和数据流上下文。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入车辆本次扫描得到的完整 DTC 列表，可同时传多个故障码。
@@ -49,6 +61,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 ### 2. `dtc_grouping_service`
 
 - 地址：`POST /api/v1/tools/dtc_grouping_service/invoke`
+- 对应 RAG 接口：`POST /api/v1/tool-services/dtc-grouping`
 - 用途：把车辆完整 DTC 列表按系统、语义原因和关联部件分组。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入车辆本次扫描得到的完整 DTC 列表；后续三个工具应使用返回的一个完整 `groups[].dtc_codes`。
@@ -57,6 +70,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 ### 3. `cause_ranking_service`
 
 - 地址：`POST /api/v1/tools/cause_ranking_service/invoke`
+- 对应 RAG 接口：`POST /api/v1/tool-services/cause-ranking`
 - 用途：对一个 DTC 分组的候选故障原因进行概率排序。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`，不要把多个分组混在一次请求中。
@@ -65,6 +79,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 ### 4. `diagnostic_planning_service`
 
 - 地址：`POST /api/v1/tools/diagnostic_planning_service/invoke`
+- 对应 RAG 接口：`POST /api/v1/tool-services/diagnostic-planning`
 - 用途：为一个 DTC 分组生成静态诊断检查项和判断依据。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`。
@@ -73,6 +88,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
 ### 5. `repair_planning_service`
 
 - 地址：`POST /api/v1/tools/repair_planning_service/invoke`
+- 对应 RAG 接口：`POST /api/v1/tool-services/repair-planning`
 - 用途：为一个 DTC 分组生成维修方案、关联部件和维修后验证要求。
 - 请求参数：使用上述五个通用 `arguments` 字段。
 - `dtc_codes`：传入 Grouping 返回的一个完整 `groups[index].dtc_codes`。
