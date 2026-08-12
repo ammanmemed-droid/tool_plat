@@ -26,6 +26,7 @@ EXTRA_FIELD_TYPES: dict[str, tuple[type, ...]] = {
     "status": (str,),
     "http_method": (str,),
     "http_path": (str,),
+    "client_ip": (str,),
     "http_status": (int,),
     "business_code": (int,),
     "duration_ms": (int, float),

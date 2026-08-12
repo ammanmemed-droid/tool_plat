@@ -248,6 +248,12 @@ def _completion_level(http_status: int) -> int:
     return logging.INFO
 
 
+def _client_ip(request: Request) -> str | None:
+    """请求来源 IP（TCP 层对端，不可伪造）；无客户端信息时为 None。"""
+    client = getattr(request, "client", None)
+    return client.host if client is not None else None
+
+
 def _log_request_completed(
     request: Request,
     started: float,
@@ -266,6 +272,7 @@ def _log_request_completed(
         "status": _completion_status(log_ctx.status, http_status),
         "http_method": request.method,
         "http_path": request.url.path,
+        "client_ip": _client_ip(request),
         "http_status": http_status,
         "business_code": business_code,
         "duration_ms": round((time.perf_counter() - started) * 1000, 1),
