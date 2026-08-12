@@ -37,6 +37,8 @@ EXTRA_FIELD_TYPES: dict[str, tuple[type, ...]] = {
     "request_body": (str,),
     "request_body_status": (str,),
     "request_body_truncated": (bool,),
+    "rag_request_body": (str,),
+    "rag_response_body": (str,),
 }
 EXTRA_FIELDS: tuple[str, ...] = tuple(EXTRA_FIELD_TYPES)
 

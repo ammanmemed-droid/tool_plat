@@ -6,6 +6,8 @@
 1. 裸业务结果 JSON（直接返回）；
 2. 与本中台一致的信封 {code, message, data}（code=0 时解包 data）。
 """
+import json
+import logging
 from typing import Any
 
 import httpx
@@ -13,7 +15,10 @@ import httpx
 from app.config import get_settings
 from app.core.discovery import rag_discovery
 from app.core.exceptions import ToolExecutionError, ToolPlatformError
+from app.core.logging_config import _truncate_utf8, get_app_logger
 from app.core.responses import trace_id_ctx
+
+logger = get_app_logger(__name__)
 
 
 class RagServiceClient:
@@ -36,6 +41,16 @@ class RagServiceClient:
             return []
         ip, port = instance
         return [f"http://{ip}:{port}{base_path}/{path}"]
+
+    @staticmethod
+    def _serialize_log_body(value: object, max_bytes: int) -> str | None:
+        """把请求参数 / 响应体序列化为单行日志字符串，超限截断；失败不影响业务调用。"""
+        try:
+            serialized = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            return None
+        body, _truncated = _truncate_utf8(serialized, max(1, int(max_bytes)))
+        return body
 
     def invoke(
         self,
@@ -72,9 +87,32 @@ class RagServiceClient:
             try:
                 trace_id = trace_id_ctx.get()
                 headers = {"X-Trace-ID": trace_id} if trace_id else {}
+                logger.info(
+                    "发送RAG请求",
+                    extra={
+                        "event": "rag.request",
+                        "tool_name": tool_name,
+                        "http_path": path,
+                        "rag_request_body": self._serialize_log_body(
+                            arguments, self._settings.log_request_body_max_bytes
+                        ),
+                    },
+                )
                 resp = self._client.post(url, json=arguments, timeout=req_timeout, headers=headers)
                 resp.raise_for_status()
-                return self._unwrap(tool_name, service, resp.json())
+                body = resp.json()
+                logger.info(
+                    "收到RAG响应",
+                    extra={
+                        "event": "rag.response",
+                        "tool_name": tool_name,
+                        "http_path": path,
+                        "rag_response_body": self._serialize_log_body(
+                            body, self._settings.log_request_body_max_bytes
+                        ),
+                    },
+                )
+                return self._unwrap(tool_name, service, body)
             except (httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
                 raise ToolPlatformError(
                     f"{service} 调用超时: {exc}",
