@@ -6,7 +6,6 @@
 1. 裸业务结果 JSON（直接返回）；
 2. 与本中台一致的信封 {code, message, data}（code=0 时解包 data）。
 """
-import logging
 from typing import Any
 
 import httpx
@@ -15,8 +14,6 @@ from app.config import get_settings
 from app.core.discovery import rag_discovery
 from app.core.exceptions import ToolExecutionError, ToolPlatformError
 from app.core.responses import trace_id_ctx
-
-logger = logging.getLogger(__name__)
 
 
 class RagServiceClient:
@@ -73,7 +70,6 @@ class RagServiceClient:
         last_error: str = ""
         for url in urls:
             try:
-                logger.info("转发工具调用: %s -> POST %s", tool_name, url)
                 trace_id = trace_id_ctx.get()
                 headers = {"X-Trace-ID": trace_id} if trace_id else {}
                 resp = self._client.post(url, json=arguments, timeout=req_timeout, headers=headers)
@@ -85,9 +81,9 @@ class RagServiceClient:
                     code=50400,
                 ) from exc
             except httpx.ConnectError as exc:
-                # 实例不做缓存，下次调用会重新向 Nacos 实时查询，无需剔除标记
+                # 实例不做缓存，下次调用会重新向 Nacos 实时查询，无需剔除标记；
+                # 不在此打印 URL 与异常正文，最终只由请求完成摘要记录 error_type 与业务码
                 last_error = f"请求 {url} 失败: {exc}"
-                logger.warning("%s", last_error)
                 continue
             except httpx.HTTPStatusError as exc:
                 upstream_codes = {502: 50200, 503: 50300, 504: 50400}

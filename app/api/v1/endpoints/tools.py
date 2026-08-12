@@ -1,6 +1,6 @@
 """Agent 侧工具发现与统一调用端点。"""
 from copy import deepcopy
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Path
 
@@ -10,12 +10,10 @@ from app.api.v1.schemas import (
     ToolInvokeResponse,
     ToolListResponse,
 )
-from app.core.logging_config import get_app_logger
+from app.core.log_context import current_log_context
 from app.core.openapi import COMMON_RESPONSES
 from app.core.registry import tool_registry
 from app.core.responses import success
-
-logger = get_app_logger(__name__)
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -91,7 +89,19 @@ def invoke_tool(
     request: ToolInvokeRequest,
 ) -> ToolInvokeResponse:
     """按 tool-schema.json 校验入参，执行 handler，校验出参后返回结果。"""
-    logger.info("invoke_tool: tool_name=%s, arguments=%s", tool_name, request.arguments)
-    result = tool_registry.invoke(tool_name, request.arguments)
-    logger.info("invoke_tool: tool_name=%s, result=%s", tool_name, result)
-    return ToolInvokeResponse(data=result)
+    log_ctx = current_log_context()
+    if log_ctx is not None:
+        # 只写工具名与 DTC 数量，请求参数与执行结果一律不进日志
+        log_ctx.tool_name = tool_name
+        log_ctx.dtc_count = _dtc_count(request.arguments)
+    return ToolInvokeResponse(data=tool_registry.invoke(tool_name, request.arguments))
+
+
+def _dtc_count(arguments: dict[str, Any]) -> int | None:
+    """从已解析入参统计 DTC 数量，不保留任何 DTC 内容。"""
+    codes = arguments.get("dtc_codes")
+    if isinstance(codes, list):
+        return len(codes)
+    if isinstance(arguments.get("dtc_code"), str):
+        return 1
+    return None

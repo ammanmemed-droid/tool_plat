@@ -137,7 +137,7 @@ class ToolRegistry:
         except ToolPlatformError:
             raise
         except Exception as exc:  # noqa: BLE001 - 统一兜底为执行异常
-            logger.exception("工具执行异常: %s", tool_name)
+            # 不在此处打印堆栈：异常包装后由全局异常层统一记录一次
             raise ToolExecutionError(tool_name, str(exc)) from exc
 
         if tool.output_schema:
