@@ -53,6 +53,26 @@ def test_invoke_completed_log_contains_client_ip(caplog, monkeypatch) -> None:
     assert records[-1].client_ip == "testclient"
 
 
+def test_invoke_request_log_contains_client_ip(caplog, monkeypatch) -> None:
+    """收到工具调用请求日志（tool.invoke.request）也带 client_ip。"""
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.tools.tool_registry.invoke",
+        lambda *_: {"result": "ok"},
+    )
+    with caplog.at_level("INFO", logger="app"):
+        response = TestClient(app).post(
+            "/api/v1/tools/dtc_context_service/invoke",
+            json={"request_id": "req-ip-002", "arguments": {"brand": "丰田"}},
+        )
+
+    assert response.status_code == 200
+    request_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "tool.invoke.request"
+    ]
+    assert request_records, "应输出一条收到工具调用请求日志"
+    assert request_records[-1].client_ip == "testclient"
+
+
 def test_client_ip_is_whitelisted_scalar() -> None:
     """client_ip 必须在结构化日志白名单中且限定为字符串。"""
     assert EXTRA_FIELD_TYPES["client_ip"] == (str,)

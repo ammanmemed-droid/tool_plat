@@ -209,6 +209,7 @@ def _log_invoke_request(
     fields = {
         "event": "tool.invoke.request",
         "tool_name": _invoke_tool_name(request.url.path),
+        "client_ip": _client_ip(request),
         "http_method": request.method,
         "http_path": request.url.path,
         "request_body": body,
