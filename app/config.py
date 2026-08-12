@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     # ---- 工具契约目录（tool-schema.json 所在目录） ----
     skills_dir: Path = SKILLS_DIR
 
+    # ---- 日志配置 ----
+    # 应用日志级别（DEBUG / INFO / WARNING / ERROR）
+    log_level: str = "INFO"
+    # json：生产环境单行结构化日志；text：本地开发可读日志
+    log_format: str = "json"
+    # 是否输出 uvicorn access log（生产默认关闭，避免逐请求重复日志）
+    access_log_enabled: bool = False
+    # 是否在日志中附带代码位置（模块:行号），排障时临时打开
+    log_include_caller: bool = False
+    # 单条日志 message 的最大长度，超出部分截断
+    log_message_max_length: int = 1024
+
 
 @lru_cache
 def get_settings() -> Settings:
