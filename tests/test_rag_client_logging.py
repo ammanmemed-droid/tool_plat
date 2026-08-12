@@ -86,6 +86,22 @@ def test_rag_log_fields_whitelisted() -> None:
     assert EXTRA_FIELD_TYPES["rag_response_body"] == (str,)
 
 
+def test_rag_response_body_not_cut_at_256_chars(caplog, fake_rag) -> None:
+    """RAG 响应超过 256 字符时完整输出（走字节上限 64KiB，而非字段 256 截断）。"""
+    client, fake = fake_rag
+    # 构造一个超过 256 字符但远小于 64KiB 的响应，验证完整落日志
+    long_item = "x" * 300
+    fake._payload = {"code": 0, "data": {"long_field": long_item, "items": [1, 2]}}
+    with caplog.at_level(logging.INFO, logger="app.services.rag_client"):
+        client.invoke("dtc_context_service", "dtc-context", {"brand": "丰田"})
+
+    response_records = [r for r in caplog.records if getattr(r, "event", None) == "rag.response"]
+    assert len(response_records) == 1
+    body = response_records[0].rag_response_body
+    assert '"long_field":"' + long_item in body, "300 字符字段应完整输出，不应被 256 字符截断"
+    assert "truncated" not in body
+
+
 def test_rag_request_body_truncated_when_huge(caplog, fake_rag) -> None:
     """超大请求体按配置上限截断，不整段写入日志。"""
     client, fake = fake_rag

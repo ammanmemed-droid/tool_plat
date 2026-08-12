@@ -116,7 +116,7 @@ def _extra_fields(
         value = getattr(record, field, None)
         if value is None:
             continue
-        if field == "request_body":
+        if field in ("request_body", "rag_request_body", "rag_response_body"):
             if not isinstance(value, str):
                 continue
             cleaned = _sanitize_text(value, 0)
