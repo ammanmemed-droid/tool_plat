@@ -33,10 +33,14 @@ EXTRA_FIELD_TYPES: dict[str, tuple[type, ...]] = {
     "response_bytes": (int,),
     "dtc_count": (int,),
     "error_type": (str,),
+    "request_body": (str,),
+    "request_body_status": (str,),
+    "request_body_truncated": (bool,),
 }
 EXTRA_FIELDS: tuple[str, ...] = tuple(EXTRA_FIELD_TYPES)
 
 DEFAULT_MESSAGE_MAX_LENGTH = 1024
+DEFAULT_REQUEST_BODY_MAX_BYTES = 65536
 # 字段值（非 message）的长度上限：tool_name、http_path 等取自 URL，需防注入与超长
 FIELD_MAX_LENGTH = 256
 # 安全堆栈保留的最大帧数
@@ -62,6 +66,14 @@ def _sanitize_text(value: str, max_length: int) -> str:
     if 0 < max_length < len(cleaned):
         cleaned = cleaned[:max_length] + TRUNCATED_SUFFIX
     return cleaned
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> tuple[str, bool]:
+    """按 UTF-8 字节上限截断字符串，不保留被截断的半个字符。"""
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value, False
+    return encoded[:max_bytes].decode("utf-8", errors="ignore"), True
 
 
 def _text_or_none(value: Any) -> str | None:
@@ -90,16 +102,35 @@ def _scalar_value(field: str, value: Any) -> Any | None:
     return value
 
 
-def _extra_fields(record: logging.LogRecord) -> dict[str, Any]:
+def _extra_fields(
+    record: logging.LogRecord,
+    max_request_body_bytes: int = DEFAULT_REQUEST_BODY_MAX_BYTES,
+) -> dict[str, Any]:
     """按字段名与值类型双重白名单提取扩展字段，顺序固定便于采集侧对齐。"""
     fields: dict[str, Any] = {}
+    formatter_truncated = False
     for field in EXTRA_FIELDS:
         value = getattr(record, field, None)
         if value is None:
             continue
+        if field == "request_body":
+            if not isinstance(value, str):
+                continue
+            cleaned = _sanitize_text(value, 0)
+            safe_body, formatter_truncated = _truncate_utf8(
+                cleaned, max(1, int(max_request_body_bytes))
+            )
+            fields[field] = safe_body
+            continue
+        if field == "request_body_truncated":
+            if isinstance(value, bool):
+                fields[field] = value or formatter_truncated
+            continue
         safe = _scalar_value(field, value)
         if safe is not None:
             fields[field] = safe
+    if formatter_truncated and "request_body_truncated" not in fields:
+        fields["request_body_truncated"] = True
     return fields
 
 
@@ -154,10 +185,12 @@ class JsonFormatter(logging.Formatter):
         self,
         *,
         max_message_length: int = DEFAULT_MESSAGE_MAX_LENGTH,
+        max_request_body_bytes: int = DEFAULT_REQUEST_BODY_MAX_BYTES,
         include_caller: bool = False,
     ) -> None:
         super().__init__()
         self.max_message_length = max_message_length
+        self.max_request_body_bytes = max(1, int(max_request_body_bytes))
         self.include_caller = include_caller
 
     def formatException(self, exc_info: tuple) -> str:  # noqa: N802 - 覆盖标准库钩子
@@ -179,7 +212,7 @@ class JsonFormatter(logging.Formatter):
             "trace_id": _text_or_none(getattr(record, "trace_id", None)),
             "message": _safe_message(record, self.max_message_length),
         }
-        payload.update(_extra_fields(record))
+        payload.update(_extra_fields(record, self.max_request_body_bytes))
         if self.include_caller:
             payload["caller"] = f"{record.module}:{record.lineno}"
         if record.exc_info:
@@ -202,10 +235,12 @@ class TextFormatter(logging.Formatter):
         self,
         *,
         max_message_length: int = DEFAULT_MESSAGE_MAX_LENGTH,
+        max_request_body_bytes: int = DEFAULT_REQUEST_BODY_MAX_BYTES,
         include_caller: bool = False,
     ) -> None:
         super().__init__(datefmt=TEXT_TIME_FORMAT)
         self.max_message_length = max_message_length
+        self.max_request_body_bytes = max(1, int(max_request_body_bytes))
         self.include_caller = include_caller
 
     def formatException(self, exc_info: tuple) -> str:  # noqa: N802 - 覆盖标准库钩子
@@ -220,7 +255,7 @@ class TextFormatter(logging.Formatter):
         ]
         parts.extend(
             f"{TEXT_FIELD_ALIASES.get(field, field)}={value}"
-            for field, value in _extra_fields(record).items()
+            for field, value in _extra_fields(record, self.max_request_body_bytes).items()
         )
         if self.include_caller:
             parts.append(f"caller={record.module}:{record.lineno}")
@@ -241,6 +276,16 @@ def _build_formatter(settings: Any) -> logging.Formatter:
     formatter_cls = TextFormatter if str(settings.log_format).lower() == "text" else JsonFormatter
     return formatter_cls(
         max_message_length=settings.log_message_max_length,
+        max_request_body_bytes=max(
+            1,
+            int(
+                getattr(
+                    settings,
+                    "log_request_body_max_bytes",
+                    DEFAULT_REQUEST_BODY_MAX_BYTES,
+                )
+            ),
+        ),
         include_caller=settings.log_include_caller,
     )
 

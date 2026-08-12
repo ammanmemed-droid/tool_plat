@@ -1,7 +1,8 @@
 """请求级日志摘要上下文。
 
-只保存可安全落盘的摘要字段（工具名、业务码、状态、DTC 数量、异常类型），
-不保存 arguments、上游返回对象、echo ID 或任何请求 Header。
+默认只保存可安全落盘的摘要字段（工具名、业务码、状态、DTC 数量、异常类型）。
+显式开启请求体日志时，可额外保存已经紧凑序列化并限长的 JSON 字符串；
+不保存原始 Python 对象、上游返回对象或任何请求 Header。
 
 生命周期由 app.main 的 middleware 管理：请求进入时创建，请求结束输出完成日志后重置。
 endpoint 与异常处理器通过 current_log_context() 就地更新字段，
@@ -20,13 +21,16 @@ STATUS_INTERNAL_ERROR = "internal_error"
 
 @dataclass
 class RequestLogContext:
-    """一次 HTTP 请求的日志摘要，只允许存放白名单字段。"""
+    """一次 HTTP 请求的日志上下文，只允许存放白名单及已受控的请求体字段。"""
 
     tool_name: str | None = None
     business_code: int | None = None
     status: str = STATUS_SUCCESS
     dtc_count: int | None = None
     error_type: str | None = None
+    request_body: str | None = None
+    request_body_status: str | None = None
+    request_body_truncated: bool = False
 
 
 request_log_ctx: ContextVar[RequestLogContext | None] = ContextVar("request_log", default=None)

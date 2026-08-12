@@ -6,6 +6,7 @@
 3. 注册到 Nacos 并启动心跳
 4. 关闭时从 Nacos 注销
 """
+import json
 import logging
 import time
 import uuid
@@ -32,7 +33,7 @@ from app.core.log_context import (
     current_log_context,
     request_log_ctx,
 )
-from app.core.logging_config import configure_logging, get_app_logger
+from app.core.logging_config import _truncate_utf8, configure_logging, get_app_logger
 from app.core.nacos import NacosRegistrar
 from app.core.openapi import OPENAPI_TAGS, SWAGGER_UI_PARAMETERS
 from app.core.registry import tool_registry
@@ -135,13 +136,17 @@ async def trace_id_middleware(request: Request, call_next):
     is_invoke = _is_invoke_request(request)
     try:
         if is_invoke:
+            parse_status = None
             try:
                 payload = await request.json()
             except (UnicodeDecodeError, ValueError):
                 payload = None
+                parse_status = "invalid_json"
             request_echo = extract_echo_ids(payload)
             request.state.invoke_echo = request_echo
             echo_ctx.set(request_echo)
+            if settings.log_include_request_body:
+                _log_invoke_request(request, payload, parse_status)
         response = await call_next(request)
         response.headers["X-Trace-Id"] = trace_id
         _log_request_completed(
@@ -164,6 +169,56 @@ async def trace_id_middleware(request: Request, call_next):
 
 def _is_invoke_request(request: Request) -> bool:
     return request.method == "POST" and request.url.path.endswith("/invoke")
+
+
+def _serialize_invoke_request_body(
+    payload: object, max_bytes: int
+) -> tuple[str | None, bool, str | None]:
+    """把已解析 JSON 转为单行日志字符串；失败不影响业务请求。"""
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None, False, "serialization_error"
+    body, truncated = _truncate_utf8(serialized, max(1, int(max_bytes)))
+    return body, truncated, None
+
+
+def _invoke_tool_name(path: str) -> str | None:
+    """从固定 invoke 路径中提取工具名。"""
+    parts = path.rstrip("/").split("/")
+    return parts[-2] if len(parts) >= 2 and parts[-1] == "invoke" else None
+
+
+def _log_invoke_request(
+    request: Request, payload: object, parse_status: str | None
+) -> None:
+    """按配置上限输出 `/invoke` 收到的 JSON，不读取任何 Header。"""
+    log_ctx = current_log_context()
+    if parse_status is None:
+        body, truncated, status = _serialize_invoke_request_body(
+            payload, settings.log_request_body_max_bytes
+        )
+    else:
+        body, truncated, status = None, False, parse_status
+
+    if log_ctx is not None:
+        log_ctx.request_body = body
+        log_ctx.request_body_truncated = truncated
+        log_ctx.request_body_status = status
+
+    fields = {
+        "event": "tool.invoke.request",
+        "tool_name": _invoke_tool_name(request.url.path),
+        "http_method": request.method,
+        "http_path": request.url.path,
+        "request_body": body,
+        "request_body_truncated": truncated,
+        "request_body_status": status,
+    }
+    logger.info(
+        "收到工具调用请求",
+        extra={key: value for key, value in fields.items() if value is not None},
+    )
 
 
 def _content_length(raw: str | None) -> int | None:

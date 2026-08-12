@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     log_include_caller: bool = False
     # 单条日志 message 的最大长度，超出部分截断
     log_message_max_length: int = 1024
+    # 是否记录 Tool invoke 收到的完整 JSON 入参；生产环境需明确开启
+    log_include_request_body: bool = False
+    # 请求体日志最大 UTF-8 字节数，仅限制日志，不限制业务请求
+    log_request_body_max_bytes: int = 65536
 
 
 @lru_cache
