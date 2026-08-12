@@ -14,6 +14,79 @@
         "language": "en",
         "model": "汉兰达",
         "year": 2021
+      },
+      {
+        "brand": "Ford",
+        "dtc_codes": [
+          "P0345",
+          "P0349"
+        ],
+        "language": "en",
+        "model": "FOCUS (C519E)",
+        "year": 2023
+      },
+      {
+        "brand": "Audi",
+        "dtc_codes": [
+          "U1121"
+        ],
+        "language": "en",
+        "model": "A5L",
+        "year": 2025
+      },
+      {
+        "brand": "Audi",
+        "dtc_codes": [
+          "B1076"
+        ],
+        "language": "en",
+        "model": "A5L",
+        "year": 2025
+      },
+      {
+        "brand": "Audi",
+        "dtc_codes": [
+          "P0667"
+        ],
+        "language": "en",
+        "model": "A5L",
+        "year": 2025
+      },
+      {
+        "brand": "BMW",
+        "dtc_codes": [
+          "023080"
+        ],
+        "language": "en",
+        "model": "X1 sDrive25Li",
+        "year": 2024
+      },
+      {
+        "brand": "BMW",
+        "dtc_codes": [
+          "D767DC"
+        ],
+        "language": "en",
+        "model": "X1 sDrive25Li",
+        "year": 2024
+      },
+      {
+        "brand": "Mercedes-Benz",
+        "dtc_codes": [
+          "P1193"
+        ],
+        "language": "en",
+        "model": "GLS 450 4MATIC",
+        "year": 2018
+      },
+      {
+        "brand": "Mercedes-Benz",
+        "dtc_codes": [
+          "P1190"
+        ],
+        "language": "en",
+        "model": "GLS 450 4MATIC",
+        "year": 2018
       }
     ],
     "properties": {
@@ -32,9 +105,9 @@
       "year": {
         "anyOf": [
           {
-            "maximum": 2100,
+            "type": "integer",
             "minimum": 1900,
-            "type": "integer"
+            "maximum": 2100
           },
           {
             "type": "null"
@@ -107,17 +180,9 @@
             "type": "integer"
           },
           "candidate_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
             "description": "Request-local deterministic key; not a persistent business identifier.",
-            "title": "Candidate Key"
+            "title": "Candidate Key",
+            "type": "string"
           },
           "reason_id": {
             "anyOf": [
@@ -126,12 +191,8 @@
               },
               {
                 "type": "string"
-              },
-              {
-                "type": "null"
               }
             ],
-            "default": null,
             "title": "Reason Id"
           },
           "reason": {
@@ -150,40 +211,16 @@
             "type": "number"
           },
           "is_external": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Is External"
+            "title": "Is External",
+            "type": "boolean"
           },
           "prediction_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Prediction Source"
+            "title": "Prediction Source",
+            "type": "string"
           },
           "probability_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Probability Source"
+            "title": "Probability Source",
+            "type": "string"
           },
           "supported_dtcs": {
             "items": {
@@ -225,64 +262,33 @@
             "type": "array"
           },
           "dtc_category": {
-            "anyOf": [
-              {
-                "enum": [
-                  "动力系统",
-                  "底盘系统",
-                  "车身系统",
-                  "网络通讯系统"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "动力系统",
+              "底盘系统",
+              "车身系统",
+              "网络通讯系统"
             ],
-            "default": null,
-            "title": "Dtc Category"
+            "title": "Dtc Category",
+            "type": "string"
           },
           "dtc_category_code": {
-            "anyOf": [
-              {
-                "enum": [
-                  "P",
-                  "C",
-                  "B",
-                  "U"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "P",
+              "C",
+              "B",
+              "U"
             ],
-            "default": null,
-            "title": "Dtc Category Code"
+            "title": "Dtc Category Code",
+            "type": "string"
           },
           "semantic_family_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Semantic Family Code"
+            "title": "Semantic Family Code",
+            "type": "string"
           },
           "system": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "System"
+            "default": "",
+            "title": "System",
+            "type": "string"
           },
           "involved_parts": {
             "items": {
@@ -343,22 +349,14 @@
             "type": "integer"
           },
           "priority": {
-            "anyOf": [
-              {
-                "enum": [
-                  "high",
-                  "medium",
-                  "low"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
             "description": "Reserved until the product rule for group priority is confirmed.",
-            "title": "Priority"
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Priority",
+            "type": "string"
           }
         },
         "required": [
@@ -426,15 +424,8 @@
             "type": "string"
           },
           "year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year"
+            "title": "Year",
+            "type": "integer"
           },
           "requested_dtcs": {
             "items": {
@@ -500,7 +491,6 @@
         "required": [
           "brand",
           "model",
-          "year",
           "requested_dtcs",
           "unmatched_dtcs",
           "uncertain_dtcs",
@@ -518,42 +508,37 @@
       }
     },
     "properties": {
-      "uncertainty_note": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
+      "status": {
+        "default": "ok",
+        "enum": [
+          "ok",
+          "no_data",
+          "partial",
+          "missing_input"
         ],
-        "default": null,
-        "title": "Uncertainty Note"
+        "title": "Status",
+        "type": "string"
+      },
+      "message": {
+        "default": "",
+        "title": "Message",
+        "type": "string"
+      },
+      "uncertainty_note": {
+        "default": "",
+        "title": "Uncertainty Note",
+        "type": "string"
       },
       "missing_required_info": {
-        "anyOf": [
-          {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Missing Required Info"
+        "items": {
+          "type": "string"
+        },
+        "title": "Missing Required Info",
+        "type": "array"
       },
       "group": {
-        "anyOf": [
-          {
-            "$ref": "#/$defs/MvpGroupOut"
-          },
-          {
-            "type": "null"
-          }
-        ]
+        "$ref": "#/$defs/MvpGroupOut",
+        "title": "Group"
       },
       "predictions": {
         "items": {
@@ -589,24 +574,20 @@
         "type": "array"
       },
       "meta": {
-        "anyOf": [
-          {
-            "$ref": "#/$defs/RecallMetaOut"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null
+        "$ref": "#/$defs/RecallMetaOut",
+        "title": "Meta"
       }
     },
     "required": [
-      "group",
       "predictions",
       "local_candidate_count",
       "probability_source",
       "probability_degraded",
-      "issues"
+      "issues",
+      "status",
+      "message",
+      "uncertainty_note",
+      "missing_required_info"
     ],
     "title": "CauseRankingV1Output",
     "type": "object"

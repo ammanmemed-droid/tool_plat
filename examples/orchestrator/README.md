@@ -1,4 +1,4 @@
-# 编排层五工具联调示例（RAG 0.7.0）
+# 编排层五工具联调示例（RAG 0.8.0）
 
 统一调用地址：
 
@@ -83,8 +83,10 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
   "code": 0,
   "message": "success",
   "data": {
-    "uncertainty_note": null,
-    "missing_required_info": null,
+    "status": "partial",
+    "message": "已返回部分检索结果，请结合 meta 和 issues 复核。",
+    "uncertainty_note": "",
+    "missing_required_info": [],
     "contexts": [
       {
         "dtc_code": "P0136",
@@ -92,7 +94,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "dtc_description": "氧传感器电路故障 (B1 S2)",
         "dtc_category": "动力系统",
         "system": "发动机混合动力系统",
-        "subsystem": null,
+        "subsystem": "",
         "trigger_conditions": [
           "发动机运行或点火开关 ON 时，控制单元持续监测到相关信号超出阈值，达到规定时间后存储该 DTC"
         ],
@@ -161,8 +163,10 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
   "code": 0,
   "message": "success",
   "data": {
-    "uncertainty_note": null,
-    "missing_required_info": null,
+    "status": "partial",
+    "message": "已返回部分检索结果，请结合 meta 和 issues 复核。",
+    "uncertainty_note": "",
+    "missing_required_info": [],
     "groups": [
       {
         "group_id": "ad6313c778af",
@@ -185,8 +189,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "match_level": "year_fallback",
         "year_fallback_dtcs": ["P0136", "P0137", "P0138"],
         "member_count": 3,
-        "record_count": 36,
-        "priority": null
+        "record_count": 36
       }
     ],
     "standalone_dtcs": ["P0420"],
@@ -251,8 +254,10 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
   "code": 0,
   "message": "success",
   "data": {
-    "uncertainty_note": null,
-    "missing_required_info": null,
+    "status": "partial",
+    "message": "已返回部分检索结果，请结合 meta 和 issues 复核。",
+    "uncertainty_note": "",
+    "missing_required_info": [],
     "group": {
       "group_id": "ad6313c778af",
       "group_name": "后氧传感器相关故障组",
@@ -280,7 +285,6 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
       {
         "rank": 1,
         "candidate_key": "candidate_91aa3e0f3125",
-        "reason_id": null,
         "reason": "氧传感器短路",
         "reason_language": "und",
         "probability_percent": 20.0,
@@ -354,8 +358,10 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
   "code": 0,
   "message": "success",
   "data": {
-    "uncertainty_note": null,
-    "missing_required_info": null,
+    "status": "partial",
+    "message": "已返回部分检索结果，请结合 meta 和 issues 复核。",
+    "uncertainty_note": "",
+    "missing_required_info": [],
     "group": {
       "group_id": "ad6313c778af",
       "group_name": "后氧传感器相关故障组",
@@ -387,7 +393,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "linked_local_causes": ["氧传感器短路"],
         "judgment_basis": "正常",
         "operation_tip": "检查项2",
-        "required_tools": null,
+        "required_tools": [],
         "initial_priority": "high"
       }
     ],
@@ -452,8 +458,10 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
   "code": 0,
   "message": "success",
   "data": {
-    "uncertainty_note": null,
-    "missing_required_info": null,
+    "status": "partial",
+    "message": "已返回部分检索结果，请结合 meta 和 issues 复核。",
+    "uncertainty_note": "",
+    "missing_required_info": [],
     "group": {
       "group_id": "ad6313c778af",
       "group_name": "后氧传感器相关故障组",
@@ -485,11 +493,8 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "repair_steps": "方案1：更换氧传感器",
         "repair_method": "按维修手册拆卸并更换氧传感器，装复后清除故障码并进行功能验证",
         "parts": ["氧传感器"],
-        "required_tools": null,
-        "labor_hours": null,
-        "reference_price": null,
-        "currency": null,
-        "warning_note": null,
+        "required_tools": [],
+        "warning_note": "",
         "post_repair_verification": [],
         "requires_confirmation": true
       }
@@ -544,7 +549,8 @@ curl -X POST http://localhost:8000/api/v1/tools/dtc_grouping_service/invoke \
   --data-raw '{"request_id":"orchestration-dtc_grouping_service-001","session_id":"repair-session-001","tenant_id":"tenant-demo","task_id":1001,"arguments":{"brand":"丰田","model":"汉兰达","year":2021,"dtc_codes":["P0136","P0137","P0138","P0420"],"language":"en"}}'
 ```
 
-五个接口的成功响应都包含 `code`、`message`、`data`、`trace_id` 和 `echo`。RAG 返回的
+五个接口的成功响应都包含 `code`、`message`、`data`、`trace_id` 和 `echo`。中台外层
+`code=0` 表示 Tool 调用完成；业务结果读取 `data.status`，业务提示读取 `data.message`。RAG 返回的
 完整业务对象位于 `data`，不会再嵌套一层业务信封。上面的响应 JSON 来自当前联调数据，
 业务内容会随车辆、故障码和知识库数据变化，联调时应重点核对字段结构和类型。
 未提交任何匹配 ID 时，invoke 响应仍包含 `"echo": {}`。成功和错误响应使用相同回显规则。
