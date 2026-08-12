@@ -1,4 +1,4 @@
-"""调用 RAG 强类型接口并用中台本地 Schema 校验真实 0.7.0 响应。"""
+"""调用 RAG 强类型接口并用中台本地 Schema 校验真实 0.8.0 响应。"""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 import jsonschema
+
+from sync_rag_five_tool_contracts import normalize_input_schema
 
 
 TOOL_CONTRACTS = {
@@ -31,6 +33,18 @@ def load_contract(skill_dir: str) -> dict:
     )
 
 
+def assert_no_json_null(value: object, path: str = "$") -> None:
+    """递归确认 RAG 0.8.0 公开响应不包含 JSON null。"""
+    if value is None:
+        raise RuntimeError(f"JSON null found at {path}")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert_no_json_null(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            assert_no_json_null(item, f"{path}[{index}]")
+
+
 def main() -> int:
     options = parse_args()
     client = httpx.Client(timeout=options.timeout)
@@ -40,10 +54,7 @@ def main() -> int:
             f"{options.base_url.rstrip('/')}/api/v1/tools/{tool_name}"
         ).json()["data"]
         local = load_contract(skill_dir)
-        local_input = dict(local["input_schema"])
-        local_input.pop("additionalProperties", None)
-        local_input.pop("x-extract", None)
-        if local_input != remote["input_schema"]:
+        if local["input_schema"] != normalize_input_schema(remote["input_schema"]):
             raise RuntimeError(f"input schema drift: {tool_name}")
         if local["output_schema"] != remote["output_schema"]:
             raise RuntimeError(f"output schema drift: {tool_name}")
@@ -62,6 +73,11 @@ def main() -> int:
         validator_class = jsonschema.validators.validator_for(output_schema)
         validator_class.check_schema(output_schema)
         validator_class(output_schema).validate(body)
+        assert_no_json_null(body)
+        if body.get("status") not in {"ok", "partial", "no_data", "missing_input"}:
+            raise RuntimeError(f"invalid business status: {body.get('status')}")
+        if not isinstance(body.get("message"), str):
+            raise RuntimeError("business message must be a string")
         print(f"[OK] {tool_name}: HTTP {response.status_code}")
         return body
 

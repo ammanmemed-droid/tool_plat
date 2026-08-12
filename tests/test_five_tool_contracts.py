@@ -21,8 +21,13 @@ def _load_input_schema(skill_dir: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))["input_schema"]
 
 
+def _load_contract(skill_dir: str) -> dict:
+    path = Path("myskills") / skill_dir / "tool-schema.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 @pytest.mark.parametrize("skill_dir", SKILL_DIRS)
-def test_five_tool_contract_accepts_only_rag_070_public_input(skill_dir: str) -> None:
+def test_five_tool_contract_accepts_only_rag_080_public_input(skill_dir: str) -> None:
     schema = _load_input_schema(skill_dir)
     canonical = {
         "brand": "丰田",
@@ -36,6 +41,36 @@ def test_five_tool_contract_accepts_only_rag_070_public_input(skill_dir: str) ->
     assert set(schema["properties"]) == {"brand", "model", "year", "dtc_codes", "language"}
     assert set(schema["required"]) == {"brand", "model", "dtc_codes"}
     assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("skill_dir", SKILL_DIRS)
+def test_five_tool_contract_accepts_missing_or_null_year(skill_dir: str) -> None:
+    schema = _load_input_schema(skill_dir)
+    request = {
+        "brand": "丰田",
+        "model": "汉兰达",
+        "year": None,
+        "dtc_codes": ["P0136"],
+    }
+
+    assert validate_against_schema(request, schema) is None
+
+
+@pytest.mark.parametrize("skill_dir", SKILL_DIRS)
+@pytest.mark.parametrize("invalid_year", [1899, 2101])
+def test_five_tool_contract_rejects_year_outside_supported_range(
+    skill_dir: str,
+    invalid_year: int,
+) -> None:
+    schema = _load_input_schema(skill_dir)
+    request = {
+        "brand": "丰田",
+        "model": "汉兰达",
+        "year": invalid_year,
+        "dtc_codes": ["P0136"],
+    }
+
+    assert validate_against_schema(request, schema) is not None
 
 
 @pytest.mark.parametrize("skill_dir", SKILL_DIRS)
@@ -72,3 +107,27 @@ def test_five_tool_contract_extracts_rag_request_from_orchestration_snapshot(ski
         "language": "en",
     }
     assert validate_against_schema(extracted, schema) is None
+
+
+@pytest.mark.parametrize("skill_dir", SKILL_DIRS)
+def test_five_tool_output_contract_uses_rag_080_status_and_no_nulls(
+    skill_dir: str,
+) -> None:
+    output_schema = _load_contract(skill_dir)["output_schema"]
+    properties = output_schema["properties"]
+
+    assert properties["status"]["enum"] == ["ok", "no_data", "partial", "missing_input"]
+    assert properties["message"]["type"] == "string"
+    assert "status" in output_schema["required"]
+    assert "message" in output_schema["required"]
+    assert '"type": "null"' not in json.dumps(output_schema, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    "skill_dir",
+    ["cause-ranking-skill", "diagnostic-planning-skill", "repair-planning-skill"],
+)
+def test_rag_080_group_level_outputs_allow_group_to_be_omitted(skill_dir: str) -> None:
+    output_schema = _load_contract(skill_dir)["output_schema"]
+
+    assert "group" not in output_schema["required"]

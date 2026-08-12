@@ -15,6 +15,59 @@
         "language": "en",
         "model": "汉兰达",
         "year": 2021
+      },
+      {
+        "brand": "Audi",
+        "dtc_codes": [
+          "U05AC00",
+          "P066700",
+          "B1B5AF1",
+          "U148500",
+          "B16D649",
+          "B10764A",
+          "U112100",
+          "U146700",
+          "U159C00",
+          "U019900",
+          "U198C00",
+          "U111100",
+          "U043300"
+        ],
+        "language": "en",
+        "model": "A5L",
+        "year": 2025
+      },
+      {
+        "brand": "BMW",
+        "dtc_codes": [
+          "023080",
+          "030846",
+          "D767DC",
+          "7E0280"
+        ],
+        "language": "en",
+        "model": "X1 sDrive25Li",
+        "year": 2024
+      },
+      {
+        "brand": "Ford",
+        "dtc_codes": [
+          "P0345:00:64",
+          "P0349:00:64"
+        ],
+        "language": "en",
+        "model": "FOCUS (C519E)",
+        "year": 2023
+      },
+      {
+        "brand": "Mercedes-Benz",
+        "dtc_codes": [
+          "P119300",
+          "P119000"
+        ],
+        "language": "en",
+        "model": "GLS 450 4MATIC",
+        "year": 2018
       }
     ],
     "properties": {
@@ -33,9 +86,9 @@
       "year": {
         "anyOf": [
           {
-            "maximum": 2100,
+            "type": "integer",
             "minimum": 1900,
-            "type": "integer"
+            "maximum": 2100
           },
           {
             "type": "null"
@@ -117,58 +170,29 @@
             "type": "string"
           },
           "dtc_description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Dtc Description"
+            "default": "",
+            "title": "Dtc Description",
+            "type": "string"
           },
           "dtc_category": {
-            "anyOf": [
-              {
-                "enum": [
-                  "动力系统",
-                  "底盘系统",
-                  "车身系统",
-                  "网络通讯系统"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "动力系统",
+              "底盘系统",
+              "车身系统",
+              "网络通讯系统"
             ],
-            "default": null,
-            "title": "Dtc Category"
+            "title": "Dtc Category",
+            "type": "string"
           },
           "system": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "System"
+            "default": "",
+            "title": "System",
+            "type": "string"
           },
           "subsystem": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Subsystem"
+            "default": "",
+            "title": "Subsystem",
+            "type": "string"
           },
           "trigger_conditions": {
             "items": {
@@ -250,15 +274,8 @@
             "type": "string"
           },
           "year": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year"
+            "title": "Year",
+            "type": "integer"
           },
           "requested_dtcs": {
             "items": {
@@ -324,7 +341,6 @@
         "required": [
           "brand",
           "model",
-          "year",
           "requested_dtcs",
           "unmatched_dtcs",
           "uncertain_dtcs",
@@ -342,32 +358,33 @@
       }
     },
     "properties": {
-      "uncertainty_note": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
+      "status": {
+        "default": "ok",
+        "enum": [
+          "ok",
+          "no_data",
+          "partial",
+          "missing_input"
         ],
-        "default": null,
-        "title": "Uncertainty Note"
+        "title": "Status",
+        "type": "string"
+      },
+      "message": {
+        "default": "",
+        "title": "Message",
+        "type": "string"
+      },
+      "uncertainty_note": {
+        "default": "",
+        "title": "Uncertainty Note",
+        "type": "string"
       },
       "missing_required_info": {
-        "anyOf": [
-          {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Missing Required Info"
+        "items": {
+          "type": "string"
+        },
+        "title": "Missing Required Info",
+        "type": "array"
       },
       "contexts": {
         "items": {
@@ -384,20 +401,17 @@
         "type": "array"
       },
       "meta": {
-        "anyOf": [
-          {
-            "$ref": "#/$defs/RecallMetaOut"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null
+        "$ref": "#/$defs/RecallMetaOut",
+        "title": "Meta"
       }
     },
     "required": [
       "contexts",
-      "issues"
+      "issues",
+      "status",
+      "message",
+      "uncertainty_note",
+      "missing_required_info"
     ],
     "title": "DtcContextV1Output",
     "type": "object"

@@ -1,10 +1,22 @@
-"""验证 RAG 0.7.0 五工具经 Tool 中台转发的完整链路。"""
+"""验证 RAG 0.8.0 五工具经 Tool 中台转发的完整链路。"""
 from __future__ import annotations
 
 import argparse
 import json
 
 import httpx
+
+
+def assert_no_json_null(value: object, path: str = "$") -> None:
+    """递归确认中台转发后的业务 data 不包含 JSON null。"""
+    if value is None:
+        raise RuntimeError(f"JSON null found at {path}")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert_no_json_null(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            assert_no_json_null(item, f"{path}[{index}]")
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,8 +42,14 @@ def main() -> int:
                 f"{tool_name} failed: HTTP {response.status_code}, "
                 f"code={body.get('code')}, message={body.get('message')}"
             )
-        print(f"[OK] {tool_name}: {json.dumps(body['data'], ensure_ascii=False)[:240]}")
-        return body["data"]
+        data = body["data"]
+        assert_no_json_null(data)
+        if data.get("status") not in {"ok", "partial", "no_data", "missing_input"}:
+            raise RuntimeError(f"invalid business status: {data.get('status')}")
+        if not isinstance(data.get("message"), str):
+            raise RuntimeError("business message must be a string")
+        print(f"[OK] {tool_name}: {json.dumps(data, ensure_ascii=False)[:240]}")
+        return data
 
     full_scan = {
         "brand": "丰田",

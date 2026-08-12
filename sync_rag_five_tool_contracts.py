@@ -1,7 +1,8 @@
-"""从 RAG 0.7.0 运行时详情同步五工具契约，明确使用 UTF-8 解码。"""
+"""从 RAG 0.8.0 运行时详情同步五工具契约，明确使用 UTF-8 解码。"""
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 from pathlib import Path
 
@@ -42,13 +43,41 @@ def get_json(client: httpx.Client, url: str) -> dict:
     return json.loads(response.content.decode("utf-8"))
 
 
+def normalize_input_schema(remote_schema: dict) -> dict:
+    """将 RAG 详情接口的约束转换为标准 JSON Schema，并保留可空兼容。"""
+    schema = deepcopy(remote_schema)
+    properties = schema.get("properties", {})
+    remote_year = properties.get("year")
+    if isinstance(remote_year, dict):
+        year = deepcopy(remote_year)
+        minimum = year.pop("ge", year.pop("minimum", None))
+        maximum = year.pop("le", year.pop("maximum", None))
+        title = year.pop("title", "Year")
+        year.pop("default", None)
+        year["type"] = "integer"
+        if minimum is not None:
+            year["minimum"] = minimum
+        if maximum is not None:
+            year["maximum"] = maximum
+        properties["year"] = {
+            "anyOf": [year, {"type": "null"}],
+            "default": None,
+            "title": title,
+        }
+    schema["additionalProperties"] = False
+    schema["x-extract"] = EXTRACT_MAPPING
+    return schema
+
+
 def main() -> int:
     options = parse_args()
     base_url = options.base_url.rstrip("/")
     client = httpx.Client(timeout=20.0)
     openapi = get_json(client, f"{base_url}/openapi.json")
-    if openapi.get("info", {}).get("version") != "0.7.0":
-        raise RuntimeError(f"expected RAG 0.7.0, got {openapi.get('info', {}).get('version')}")
+    expected_version = "0.8.0"
+    actual_version = openapi.get("info", {}).get("version")
+    if actual_version != expected_version:
+        raise RuntimeError(f"expected RAG {expected_version}, got {actual_version}")
 
     for tool_name, path in TARGETS.items():
         remote = get_json(client, f"{base_url}/api/v1/tools/{tool_name}")
@@ -56,9 +85,7 @@ def main() -> int:
             raise RuntimeError(f"RAG tool detail failed: {tool_name}: {remote}")
         detail = remote["data"]
         local = json.loads(path.read_text(encoding="utf-8"))
-        input_schema = detail["input_schema"]
-        input_schema["additionalProperties"] = False
-        input_schema["x-extract"] = EXTRACT_MAPPING
+        input_schema = normalize_input_schema(detail["input_schema"])
         local["description"] = detail["description"]
         local["input_schema"] = input_schema
         local["output_schema"] = detail["output_schema"]

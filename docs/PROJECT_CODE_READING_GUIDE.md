@@ -372,7 +372,7 @@ RAG 返回后，中台同样用 `output_schema` 校验。这样可以在中台�
 
 ## 10. 8 个 Tool 应该怎么看
 
-### 10.1 五个 RAG 0.7.0 强类型 Tool
+### 10.1 五个 RAG 0.8.0 强类型 Tool
 
 五个 Tool 使用相同公共输入：
 
@@ -540,7 +540,7 @@ dtc-cause-cards 契约抓取、对比与同步。它们不参与服务启动和�
 
 | 测试文件 | 保证的核心行为 |
 |---|---|
-| `test_five_tool_contracts.py` | 五工具只接受 RAG 0.7.0 公共输入，并能从编排快照提取槽位 |
+| `test_five_tool_contracts.py` | 五工具只接受 RAG 0.8.0 公共输入，并能从编排快照提取槽位 |
 | `test_registry_slot_extraction.py` | 注册中心在校验前执行嵌套槽位提取 |
 | `test_invoke_argument_filtering.py` | 有无 `x-extract` 时都能过滤未知 Agent 字段 |
 | `test_invoke_echo_request.py` | ID 匹配、类型限制、成功/错误回显、并发隔离、OpenAPI 示例 |

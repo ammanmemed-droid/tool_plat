@@ -43,7 +43,7 @@ roxie-supper-rag-service（Nacos 发现，全部远程工具）
 远程代理工作机制：
 - **Agent ID 回显**：所有 Tool invoke 请求只识别顶层 `id` / `*_id` 字符串或整数，
   从工具参数中分离并在成功、错误响应的 `echo` 中原样返回；没有 ID 时返回 `echo: {}`；
-- **五工具 0.7.0 公共输入**：Context / Grouping / Cause / Diagnostic / Repair 均使用
+- **五工具 0.8.0 公共输入**：Context / Grouping / Cause / Diagnostic / Repair 均使用
   `brand + model + dtc_codes`，可选 `year + language`；中台可从编排层快照提取这些字段，
   仅把白名单字段发送给 RAG；
 - **服务发现**：每次调用实时从 Nacos 查询 `roxie-supper-rag-service`
@@ -97,7 +97,7 @@ uv run pytest tests/ -v
 
 # 远程链路冒烟验证（需先启动服务，且上游服务已注册 Nacos）
 uv run python -m app.main
-uv run python verify_rag_chain.py   # RAG 0.7.0 五工具
+uv run python verify_rag_chain.py   # RAG 0.8.0 五工具
 uv run python verify_diagnose.py    # diagnose_service
 ```
 
