@@ -37,8 +37,6 @@ EXTRA_FIELD_TYPES: dict[str, tuple[type, ...]] = {
     "request_body": (str,),
     "request_body_status": (str,),
     "request_body_truncated": (bool,),
-    "rag_request_body": (str,),
-    "rag_response_body": (str,),
 }
 EXTRA_FIELDS: tuple[str, ...] = tuple(EXTRA_FIELD_TYPES)
 
@@ -116,7 +114,7 @@ def _extra_fields(
         value = getattr(record, field, None)
         if value is None:
             continue
-        if field in ("request_body", "rag_request_body", "rag_response_body"):
+        if field == "request_body":
             if not isinstance(value, str):
                 continue
             cleaned = _sanitize_text(value, 0)
