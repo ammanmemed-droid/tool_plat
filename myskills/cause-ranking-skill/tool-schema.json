@@ -227,6 +227,11 @@
             },
             "title": "Supported Dtcs",
             "type": "array"
+          },
+          "troubleshooting": {
+            "description": "该候选原因对应的排查/检修指引文本；未知时省略",
+            "title": "Troubleshooting",
+            "type": "string"
           }
         },
         "required": [
