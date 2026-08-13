@@ -68,6 +68,25 @@
         "language": "en",
         "model": "GLS 450 4MATIC",
         "year": 2018
+      },
+      {
+        "brand": "Volkswagen",
+        "dtc_codes": [
+          "U101100",
+          "U112300",
+          "U112100",
+          "C119F00",
+          "B1168F1",
+          "U140000",
+          "B148754",
+          "B122D29",
+          "B13BD16",
+          "C11D1F3",
+          "C12A329"
+        ],
+        "language": "en",
+        "model": "Touareg",
+        "year": 2020
       }
     ],
     "properties": {

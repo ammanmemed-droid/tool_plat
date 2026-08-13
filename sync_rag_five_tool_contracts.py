@@ -74,7 +74,7 @@ def main() -> int:
     base_url = options.base_url.rstrip("/")
     client = httpx.Client(timeout=20.0)
     openapi = get_json(client, f"{base_url}/openapi.json")
-    expected_version = "0.8.0"
+    expected_version = "0.8.1"
     actual_version = openapi.get("info", {}).get("version")
     if actual_version != expected_version:
         raise RuntimeError(f"expected RAG {expected_version}, got {actual_version}")

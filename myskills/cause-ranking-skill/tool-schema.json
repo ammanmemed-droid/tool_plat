@@ -18,8 +18,8 @@
       {
         "brand": "Ford",
         "dtc_codes": [
-          "P0345",
-          "P0349"
+          "P0345:00:64",
+          "P0349:00:64"
         ],
         "language": "en",
         "model": "FOCUS (C519E)",
@@ -28,7 +28,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "U1121"
+          "U112100"
         ],
         "language": "en",
         "model": "A5L",
@@ -37,7 +37,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "B1076"
+          "B10764A"
         ],
         "language": "en",
         "model": "A5L",
@@ -46,7 +46,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "P0667"
+          "P066700"
         ],
         "language": "en",
         "model": "A5L",
@@ -73,7 +73,7 @@
       {
         "brand": "Mercedes-Benz",
         "dtc_codes": [
-          "P1193"
+          "P119300"
         ],
         "language": "en",
         "model": "GLS 450 4MATIC",
@@ -82,11 +82,28 @@
       {
         "brand": "Mercedes-Benz",
         "dtc_codes": [
-          "P1190"
+          "P119000"
         ],
         "language": "en",
         "model": "GLS 450 4MATIC",
         "year": 2018
+      },
+      {
+        "brand": "Volkswagen",
+        "dtc_codes": [
+          "U101100"
+        ],
+        "language": "en",
+        "model": "Touareg",
+        "year": 2020
+      },
+      {
+        "brand": "大众",
+        "dtc_codes": [
+          "00445"
+        ],
+        "language": "en",
+        "model": "途锐 7L"
       }
     ],
     "properties": {
@@ -229,7 +246,7 @@
             "type": "array"
           },
           "troubleshooting": {
-            "description": "该候选原因对应的排查/检修指引文本；未知时省略",
+            "description": "Comma-separated, stable, de-duplicated diagnostic check items whose linked_local_causes match this candidate reason.",
             "title": "Troubleshooting",
             "type": "string"
           }
@@ -238,7 +255,8 @@
           "rank",
           "reason",
           "probability_percent",
-          "supported_dtcs"
+          "supported_dtcs",
+          "troubleshooting"
         ],
         "title": "CausePredictionOut",
         "type": "object"

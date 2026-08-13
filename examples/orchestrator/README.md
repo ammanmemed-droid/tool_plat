@@ -291,7 +291,8 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "is_external": true,
         "prediction_source": "local_repair_knowledge",
         "probability_source": "local_assessor",
-        "supported_dtcs": ["P0136", "P0137", "P0138"]
+        "supported_dtcs": ["P0136", "P0137", "P0138"],
+        "troubleshooting": "检查项1：检查氧传感器，依据原厂诊断流程判断；异常时更换氧传感器"
       }
     ],
     "local_candidate_count": 6,
@@ -397,6 +398,22 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "initial_priority": "high"
       }
     ],
+    "predictions": [
+      {
+        "rank": 1,
+        "candidate_key": "candidate_91aa3e0f3125",
+        "reason": "氧传感器短路",
+        "reason_language": "und",
+        "probability_percent": 25,
+        "is_external": true,
+        "prediction_source": "local_repair_knowledge",
+        "probability_source": "local_assessor",
+        "supported_dtcs": ["P0136", "P0137", "P0138"],
+        "troubleshooting": "检查项1：检查氧传感器，依据原厂诊断流程判断；异常时更换氧传感器"
+      }
+    ],
+    "probability_source": "local_assessor",
+    "probability_degraded": true,
     "issues": [],
     "meta": {
       "brand": "丰田",
@@ -499,6 +516,22 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
         "requires_confirmation": true
       }
     ],
+    "predictions": [
+      {
+        "rank": 1,
+        "candidate_key": "candidate_91aa3e0f3125",
+        "reason": "氧传感器短路",
+        "reason_language": "und",
+        "probability_percent": 25,
+        "is_external": true,
+        "prediction_source": "local_repair_knowledge",
+        "probability_source": "local_assessor",
+        "supported_dtcs": ["P0136", "P0137", "P0138"],
+        "troubleshooting": "检查项1：检查氧传感器，依据原厂诊断流程判断；异常时更换氧传感器"
+      }
+    ],
+    "probability_source": "local_assessor",
+    "probability_degraded": true,
     "issues": [],
     "meta": {
       "brand": "丰田",

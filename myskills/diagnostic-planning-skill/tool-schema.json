@@ -1,7 +1,7 @@
 {
   "tool_name": "diagnostic_planning_service",
   "tool_kind": "global_tool_service",
-  "description": "按车辆与一个已选 DTC 组一次召回维修知识，返回静态检查建议。保留为独立工具，不进入当前前端主流程。",
+  "description": "按车辆与一个已选 DTC 组一次召回维修知识，返回原因与同级可能性百分比、静态检查建议。保留为独立工具，不进入当前前端主流程。",
   "input_schema": {
     "examples": [
       {
@@ -18,8 +18,8 @@
       {
         "brand": "Ford",
         "dtc_codes": [
-          "P0345",
-          "P0349"
+          "P0345:00:64",
+          "P0349:00:64"
         ],
         "language": "en",
         "model": "FOCUS (C519E)",
@@ -28,7 +28,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "U1121"
+          "U112100"
         ],
         "language": "en",
         "model": "A5L",
@@ -37,7 +37,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "B1076"
+          "B10764A"
         ],
         "language": "en",
         "model": "A5L",
@@ -46,7 +46,7 @@
       {
         "brand": "Audi",
         "dtc_codes": [
-          "P0667"
+          "P066700"
         ],
         "language": "en",
         "model": "A5L",
@@ -73,7 +73,7 @@
       {
         "brand": "Mercedes-Benz",
         "dtc_codes": [
-          "P1193"
+          "P119300"
         ],
         "language": "en",
         "model": "GLS 450 4MATIC",
@@ -82,11 +82,28 @@
       {
         "brand": "Mercedes-Benz",
         "dtc_codes": [
-          "P1190"
+          "P119000"
         ],
         "language": "en",
         "model": "GLS 450 4MATIC",
         "year": 2018
+      },
+      {
+        "brand": "Volkswagen",
+        "dtc_codes": [
+          "U101100"
+        ],
+        "language": "en",
+        "model": "Touareg",
+        "year": 2020
+      },
+      {
+        "brand": "大众",
+        "dtc_codes": [
+          "00445"
+        ],
+        "language": "en",
+        "model": "途锐 7L"
       }
     ],
     "properties": {
@@ -170,6 +187,80 @@
   },
   "output_schema": {
     "$defs": {
+      "CausePredictionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "rank": {
+            "minimum": 1,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "candidate_key": {
+            "description": "Request-local deterministic key; not a persistent business identifier.",
+            "title": "Candidate Key",
+            "type": "string"
+          },
+          "reason_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Reason Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reason_language": {
+            "default": "und",
+            "title": "Reason Language",
+            "type": "string"
+          },
+          "probability_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Probability Percent",
+            "type": "number"
+          },
+          "is_external": {
+            "title": "Is External",
+            "type": "boolean"
+          },
+          "prediction_source": {
+            "title": "Prediction Source",
+            "type": "string"
+          },
+          "probability_source": {
+            "title": "Probability Source",
+            "type": "string"
+          },
+          "supported_dtcs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Dtcs",
+            "type": "array"
+          },
+          "troubleshooting": {
+            "description": "Comma-separated, stable, de-duplicated diagnostic check items whose linked_local_causes match this candidate reason.",
+            "title": "Troubleshooting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "reason",
+          "probability_percent",
+          "supported_dtcs",
+          "troubleshooting"
+        ],
+        "title": "CausePredictionOut",
+        "type": "object"
+      },
       "MvpGroupOut": {
         "additionalProperties": false,
         "properties": {
@@ -533,6 +624,27 @@
         "$ref": "#/$defs/MvpGroupOut",
         "title": "Group"
       },
+      "predictions": {
+        "items": {
+          "$ref": "#/$defs/CausePredictionOut"
+        },
+        "title": "Predictions",
+        "type": "array"
+      },
+      "probability_source": {
+        "enum": [
+          "remote_hybrid",
+          "local_assessor",
+          "even_shares",
+          "not_available"
+        ],
+        "title": "Probability Source",
+        "type": "string"
+      },
+      "probability_degraded": {
+        "title": "Probability Degraded",
+        "type": "boolean"
+      },
       "static_checks": {
         "items": {
           "$ref": "#/$defs/StaticCheckOut"
@@ -553,6 +665,9 @@
       }
     },
     "required": [
+      "predictions",
+      "probability_source",
+      "probability_degraded",
       "static_checks",
       "issues",
       "status",
