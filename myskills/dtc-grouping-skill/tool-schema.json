@@ -228,13 +228,6 @@
             "title": "Involved Parts",
             "type": "array"
           },
-          "shared_parts": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Shared Parts",
-            "type": "array"
-          },
           "group_reason": {
             "enum": [
               "same_code",
@@ -288,6 +281,13 @@
             ],
             "title": "Priority",
             "type": "string"
+          },
+          "parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parts",
+            "type": "array"
           }
         },
         "required": [
@@ -296,7 +296,7 @@
           "representative_dtc",
           "dtc_codes",
           "involved_parts",
-          "shared_parts",
+          "parts",
           "group_reason",
           "grouping_basis",
           "match_level",
