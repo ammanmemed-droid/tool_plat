@@ -27,7 +27,7 @@ def _load_contract(skill_dir: str) -> dict:
 
 
 @pytest.mark.parametrize("skill_dir", SKILL_DIRS)
-def test_five_tool_contract_accepts_only_rag_080_public_input(skill_dir: str) -> None:
+def test_five_tool_contract_accepts_only_rag_081_public_input(skill_dir: str) -> None:
     schema = _load_input_schema(skill_dir)
     canonical = {
         "brand": "丰田",
@@ -39,8 +39,23 @@ def test_five_tool_contract_accepts_only_rag_080_public_input(skill_dir: str) ->
 
     assert validate_against_schema(canonical, schema) is None
     assert set(schema["properties"]) == {"brand", "model", "year", "dtc_codes", "language"}
-    assert set(schema["required"]) == {"brand", "model", "dtc_codes"}
+    assert set(schema["required"]) == {"brand", "dtc_codes"}
+    assert schema["properties"]["model"]["default"] == ""
     assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("skill_dir", SKILL_DIRS)
+@pytest.mark.parametrize("model", [pytest.param(None, id="omitted"), pytest.param("", id="empty")])
+def test_five_tool_contract_accepts_optional_model(skill_dir: str, model: str | None) -> None:
+    schema = _load_input_schema(skill_dir)
+    request = {
+        "brand": "丰田",
+        "dtc_codes": ["P0136"],
+    }
+    if model is not None:
+        request["model"] = model
+
+    assert validate_against_schema(request, schema) is None
 
 
 @pytest.mark.parametrize("skill_dir", SKILL_DIRS)

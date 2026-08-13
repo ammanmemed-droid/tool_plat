@@ -78,8 +78,8 @@
         "type": "string"
       },
       "model": {
+        "default": "",
         "maxLength": 128,
-        "minLength": 1,
         "title": "Model",
         "type": "string"
       },
@@ -117,7 +117,6 @@
     },
     "required": [
       "brand",
-      "model",
       "dtc_codes"
     ],
     "title": "DtcContextV1Input",
