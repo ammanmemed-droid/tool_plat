@@ -489,7 +489,7 @@ Tool 参数或转发给 RAG。只扫描顶层，`arguments` 内的业务 ID 不�
       "semantic_family_code": "downstream_oxygen_sensor",
       "system": "发动机混合动力系统",
       "involved_parts": ["A/F传感器", "排气系统", "氧传感器", "空燃比传感器", "线束", "连接器"],
-      "shared_parts": ["A/F传感器", "排气系统", "氧传感器", "空燃比传感器", "线束", "连接器"],
+      "parts": ["A/F传感器", "排气系统", "氧传感器", "空燃比传感器", "线束", "连接器"],
       "group_reason": "semantic_family",
       "grouping_basis": [
         "group_reason=semantic_family",
